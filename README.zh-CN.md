@@ -47,9 +47,8 @@ https://github.com/user-attachments/assets/7f16edb0-25e5-4b6b-8edc-32f056d26dec
 ![实盘照片 5](docs/media/effect-05.jpg)
 ![实盘照片 6](docs/media/effect-06.jpg)
 
-</details>
 
-下载仓库后也可打开 [本地演示页](docs/演示与原理.html)，在同一页面播放视频、查看照片和原理说明。
+
 
 ## 原理
 
