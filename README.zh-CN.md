@@ -197,7 +197,7 @@ $`\mathbf{C}_j(\phi)`$ 是该角度下第 $`j`$ 种纹理的实测线性 RGB，$
 
 “格”表示把 120 mm 宽的画布划分为对应数量的采样位置。窗口底部的 **预览** 数值用于交互显示，**导出** 数值用于生成镜像。
 
-当前编码器通常沿轨道每约 **2.13 μm** 对一个可控数据字节取样（16 × 0.1333 μm）；同步码和纠错码区域会使部分取样间隔更大。相邻轨道的标称间距约 **0.74 μm**。更细的软件网格可减小边缘定位和取样误差，实际收益取决于图像、纹理和几何校准。**0.46 μm 是软件采样间距；实盘图像的有效分辨率尚未测定。** [编码实现](https://github.com/Neo-626/DiscColorStudio/blob/main/third_party/DiscImageStudio/DvdImageSolver/Solver/FastDispersionImageWriter.cs) · [DVD-R 规范，第 10.8、10.9、20 节](https://ecma-international.org/wp-content/uploads/ECMA-359_1st_edition_december_2004.pdf)
+当前编码器通常沿轨道每约 **2.13 μm** 对一个可控数据字节取样（16 × 0.1333 μm）；同步码和纠错码区域会使部分取样间隔更大。相邻轨道的标称间距约 **0.74 μm**。更细的软件网格可减小边缘定位和取样误差，实际收益取决于图像、纹理和几何校准。**0.46 μm 是软件采样间距；实盘图像的有效分辨率尚未测定。** [编码实现](https://github.com/Neo-626/DiscColorStudio/blob/main/third_party/DiscImageStudio/DvdImageSolver/Solver/FastDispersionImageWriter.cs)
 
 ### 7. 做对照、同步设置，保存彩色工程
 
