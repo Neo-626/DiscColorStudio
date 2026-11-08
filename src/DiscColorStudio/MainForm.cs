@@ -2,27 +2,28 @@ using System.Diagnostics;
 
 namespace DiscColorStudio;
 
-public sealed class MainForm : Form
+public sealed class MainForm : ResponsiveForm
 {
     private sealed record GridChoice(int Size) { public override string ToString()=>Ui.Format("{0:N0} 格 · {1:0.##} μm/格",Size,120000.0/Size); }
     public Design Document { get; private set; } = null!;
     public DiscCanvas Canvas { get; } = new() { Dock=DockStyle.Fill };
     private readonly CheckedListBox layers=new(){Dock=DockStyle.Fill,CheckOnClick=false,IntegralHeight=false,BorderStyle=BorderStyle.None};
-    private readonly FlowLayoutPanel inspector=new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(10),BackColor=Color.FromArgb(244,246,249)};
+    private readonly Panel inspector=new(){Dock=DockStyle.Fill,AutoScroll=true,Padding=new Padding(10),BackColor=Color.FromArgb(244,246,249)};
+    private readonly VerticalStack inspectorContent=new();
     private readonly InspectorSection lightSection=new(Ui.Text("光线"),true),colorSection=new(Ui.Text("颜色"),false),textureSection=new(Ui.Text("纹理与细节"),false),layoutSection=new(Ui.Text("布局"),false);
-    private readonly Label selection=new(){AutoSize=true,MaximumSize=new Size(290,0),Margin=new Padding(0,2,0,10),ForeColor=Color.FromArgb(55,68,86)};
-    private readonly Button sync=new(){Text=Ui.Text("同步到全部图片"),Width=296,Height=34,Margin=new Padding(0,0,0,12)};
+    private readonly Label selection=new(){AutoSize=true,Margin=new Padding(0,2,0,10),ForeColor=Color.FromArgb(55,68,86)};
+    private readonly Button sync=new(){Text=Ui.Text("同步到全部图片"),AutoSize=true,MinimumSize=new Size(0,34),Padding=new Padding(6,4,6,4),Margin=new Padding(0,0,0,12)};
     private readonly ToolStripStatusLabel status=new(){Spring=true,TextAlign=ContentAlignment.MiddleLeft},cursor=new();
     private readonly AdjustmentSlider exposure=new(Ui.Text("曝光"),10,800,100,"%"),brightness=new(Ui.Text("亮度"),-128,128,0),contrast=new(Ui.Text("对比度"),10,400,100,"%");
     private readonly AdjustmentSlider hue=new(Ui.Text("色相"),-60,60,0,"°"),saturation=new(Ui.Text("饱和度"),-100,100,0,"%"),luminance=new(Ui.Text("明亮度"),-100,100,0,"%");
     private readonly AdjustmentSlider banding=new(Ui.Text("条带平滑"),0,100,100,"%"),mixing=new(Ui.Text("自适应混色"),0,100,100,"%");
     private readonly Button[] bands=new Button[8];
-    private readonly Button allColors=new(){Text=Ui.Text("全部颜色"),Width=276,Height=32,FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(231,235,241),Margin=new Padding(0,0,0,6)};
-    private readonly CheckBox enableColors=new(){Text=Ui.Text("启用颜色调整"),AutoSize=true},preferDark=new(){Text=Ui.Text("暗部增强 · DIS 灰阶纹理"),AutoSize=true};
+    private readonly Button allColors=new(){Text=Ui.Text("全部颜色"),AutoSize=true,MinimumSize=new Size(0,32),Padding=new Padding(4,3,4,3),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(231,235,241),Margin=new Padding(0,0,0,6)};
+    private readonly WrappingCheckBox enableColors=new(){Text=Ui.Text("启用颜色调整"),AutoSize=true},preferDark=new(){Text=Ui.Text("暗部增强 · DIS 灰阶纹理"),AutoSize=true};
     private readonly ComboBox precision=new(){Width=276,DropDownStyle=ComboBoxStyle.DropDownList};
     private readonly TextBox name=new(){Width=276};
     private readonly NumericUpDown x=Numeric(-180,180,3),y=Numeric(-180,180,3),width=Numeric((decimal)RasterGrid.MinLayerSizeMm,240,3),height=Numeric((decimal)RasterGrid.MinLayerSizeMm,240,3),angle=Numeric(-36000,36000,2),opacity=Numeric(0,100,0);
-    private readonly CheckBox aspect=new(){Text=Ui.Text("保持宽高比"),AutoSize=true};
+    private readonly WrappingCheckBox aspect=new(){Text=Ui.Text("保持宽高比"),AutoSize=true};
     private Button editText=null!,fillColor=null!;
     private readonly ToolTip hints=new();
     private readonly UiBindings captions;
@@ -37,23 +38,23 @@ public sealed class MainForm : Form
     {
         if(!initial.HasDisCalibration)throw new InvalidOperationException(Ui.Text("请先导入 DIS 校准后的 DVD 绘图工程（.discproj）。"));
         Font=new Font("Microsoft YaHei UI",9.5f);BackColor=Color.FromArgb(244,247,251);StartPosition=FormStartPosition.CenterScreen;AllowDrop=true;
-        var screen=Screen.PrimaryScreen?.WorkingArea??new Rectangle(0,0,1600,1000);
-        Width=Math.Min(1460,screen.Width-40);Height=Math.Min(940,screen.Height-55);MinimumSize=new Size(1080,700);
+        ClientSize=new Size(1460,940);MinimumSize=new Size(760,460);
         var menu=BuildMenu();
-        var toolbar=new FlowLayoutPanel{Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,MinimumSize=new Size(0,48),Padding=new Padding(10,6,8,6),WrapContents=true,BackColor=Color.White};
+        var toolbar=new WrappingFlowPanel{Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,MinimumSize=new Size(0,48),Padding=new Padding(10,6,8,6),WrapContents=true,BackColor=Color.White};
         toolbar.Controls.AddRange([Button(Ui.Text("导入图片"),Import),Button(Ui.Text("添加文字"),()=>Add("text")),Button(Ui.Text("矩形"),()=>Add("rectangle")),Button(Ui.Text("椭圆"),()=>Add("ellipse")),Button(Ui.Text("撤销"),Undo),Button(Ui.Text("重做"),Redo),Button(Ui.Text("整盘"),Canvas.FitDisc),Button(Ui.Text("设计区"),Canvas.FocusDesign)]);
         toolbar.Controls.Add(new Label{Text=Ui.Text("连续彩色"),AutoSize=true,ForeColor=Color.FromArgb(28,105,112),Padding=new Padding(8,7,8,0)});
         toolbar.Controls.Add(Button(Ui.Text("保存工程"),()=>Save(false)));
         var burn=Button(Ui.Text("烧录光盘…"),BurnDisc);burn.BackColor=Color.FromArgb(37,110,210);burn.ForeColor=Color.White;burn.FlatStyle=FlatStyle.Flat;toolbar.Controls.Add(burn);
         toolbar.Controls.Add(Button(Ui.Text("DIS 校准…"),ImportGeometry));
-        var body=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=3,RowCount=1,Padding=new Padding(10,10,10,0)};
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,200));body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,330));
+        var body=new Panel{Dock=DockStyle.Fill,Padding=new Padding(10,10,10,0)};
         var layerPanel=new Panel{Dock=DockStyle.Fill,BackColor=Color.White,Padding=new Padding(12),Margin=new Padding(0,0,10,0)};
-        var title=new Label{Text=Ui.Text("图层"),Dock=DockStyle.Top,Height=35,Font=new Font(Font,FontStyle.Bold)};
-        var layerTools=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,MinimumSize=new Size(0,76),WrapContents=true};
+        var title=new Label{Text=Ui.Text("图层"),Dock=DockStyle.Top,AutoSize=true,Padding=new Padding(0,0,0,10),Font=new Font(Font,FontStyle.Bold)};
+        var layerTools=new WrappingFlowPanel{Dock=DockStyle.Bottom,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,MinimumSize=new Size(0,76),WrapContents=true};
         layerTools.Controls.AddRange([Button(Ui.Text("上移"),()=>MoveLayer(1)),Button(Ui.Text("下移"),()=>MoveLayer(-1)),Button(Ui.Text("复制"),Duplicate),Button(Ui.Text("删除"),Delete)]);
         layerPanel.Controls.Add(layers);layerPanel.Controls.Add(layerTools);layerPanel.Controls.Add(title);
-        body.Controls.Add(layerPanel,0,0);body.Controls.Add(Canvas,1,0);body.Controls.Add(inspector,2,0);BuildInspector();
+        layers.HorizontalScrollbar=true;
+        inspector.Controls.Add(inspectorContent);
+        body.Controls.Add(new EditorWorkspace(layerPanel,Canvas,inspector));BuildInspector();
         var footer=new StatusStrip{SizingGrip=true};footer.Items.Add(status);footer.Items.Add(cursor);
         Controls.Add(body);Controls.Add(toolbar);Controls.Add(menu);Controls.Add(footer);MainMenuStrip=menu;
         layers.SelectedIndexChanged+=(_,_)=>{if(!loading&&layers.SelectedItem is Layer l)Select(l.Id);};
@@ -67,6 +68,7 @@ public sealed class MainForm : Form
         FormClosing+=(_,e)=>{if(!ConfirmLeave())e.Cancel=true;};
         captions=new UiBindings(this);
         SetDocument(initial,path);if(calibrationChanged){dirty=true;UpdateTitle();}
+        CompleteLayout();
     }
 
     private MenuStrip BuildMenu()
@@ -124,27 +126,29 @@ public sealed class MainForm : Form
     }
     private void BuildInspector()
     {
-        inspector.Controls.Add(selection);inspector.Controls.Add(sync);sync.Click+=(_,_)=>Synchronize();
+        inspectorContent.Controls.Add(selection);inspectorContent.Controls.Add(sync);sync.Click+=(_,_)=>Synchronize();
         hints.SetToolTip(sync,Ui.Text("同步光线、颜色、纹理与采样设置，并用于之后导入的图片。"));
-        inspector.Controls.AddRange([lightSection,colorSection,textureSection,layoutSection]);
+        inspectorContent.Controls.AddRange([lightSection,colorSection,textureSection,layoutSection]);
         lightSection.Body.Controls.AddRange([exposure,brightness,contrast]);
         lightSection.Body.Controls.Add(Button(Ui.Text("重置光线"),()=>{EditAppearance(l=>{l.InputExposure=1;l.Brightness=0;l.Contrast=1;});RefreshInspector();}));
         Bind(exposure,(l,v)=>l.InputExposure=v/100);Bind(brightness,(l,v)=>l.Brightness=v);Bind(contrast,(l,v)=>l.Contrast=v/100);
         colorSection.Body.Controls.Add(allColors);
         allColors.Click+=(_,_)=>{band=-1;RefreshColors();};
-        var bandRow=new FlowLayoutPanel{Width=276,Height=74,WrapContents=true,Margin=new Padding(0,0,0,4)};
+        var bandRow=new TableLayoutPanel{ColumnCount=4,RowCount=2,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Margin=new Padding(0,0,0,4)};
+        for(int column=0;column<4;column++)bandRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,25));
+        for(int row=0;row<2;row++)bandRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Color[] colors=[Color.IndianRed,Color.Peru,Color.DarkGoldenrod,Color.SeaGreen,Color.Teal,Color.SteelBlue,Color.MediumPurple,Color.PaleVioletRed];
         for(int i=0;i<8;i++)
         {
-            int index=i;var button=new Button{Text=ColorMixer.Names[i],Width=69,Height=32,Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,Font=new Font(Ui.IsEnglish?"Segoe UI":Font.FontFamily.Name,Ui.IsEnglish?8.5f:9.5f),BackColor=colors[i],ForeColor=Color.White,AccessibleName=ColorMixer.Names[i]+Ui.Text("色通道")};
-            button.Click+=(_,_)=>{band=index;RefreshColors();};bands[i]=button;bandRow.Controls.Add(button);
+            int index=i;var button=new Button{Text=ColorMixer.Names[i],Dock=DockStyle.Fill,AutoSize=true,MinimumSize=new Size(0,32),Padding=new Padding(0,3,0,3),Margin=new Padding(0,2,0,2),FlatStyle=FlatStyle.Flat,Font=new Font(Ui.IsEnglish?"Segoe UI":Font.FontFamily.Name,Ui.IsEnglish?8.5f:9.5f),BackColor=colors[i],ForeColor=Color.White,AccessibleName=ColorMixer.Names[i]+Ui.Text("色通道")};
+            button.Click+=(_,_)=>{band=index;RefreshColors();};bands[i]=button;bandRow.Controls.Add(button,i%4,i/4);
         }
         colorSection.Body.Controls.Add(bandRow);colorSection.Body.Controls.AddRange([hue,saturation,luminance,enableColors]);
         Bind(hue,(l,v)=>{l.ColorMixer??=new();SelectedColor(l.ColorMixer).Hue=v;});
         Bind(saturation,(l,v)=>{l.ColorMixer??=new();SelectedColor(l.ColorMixer).Saturation=v;});
         Bind(luminance,(l,v)=>{l.ColorMixer??=new();SelectedColor(l.ColorMixer).Luminance=v;});
         enableColors.CheckedChanged+=(_,_)=>{if(!loading)EditAppearance(l=>l.BypassColorMixer=!enableColors.Checked);};
-        var resets=new FlowLayoutPanel{Width=276,Height=35,Margin=new Padding(0,6,0,0)};
+        var resets=new WrappingFlowPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,WrapContents=true,Margin=new Padding(0,6,0,0)};
         resets.Controls.Add(Button(Ui.Text("重置当前调整"),()=>{EditAppearance(l=>{if(l.ColorMixer is {} mixer){if(band<0)mixer.Master=new();else mixer.Bands[band]=new();}});RefreshColors();}));
         resets.Controls.Add(Button(Ui.Text("重置全部颜色"),()=>{EditAppearance(l=>{l.ColorMixer=null;l.BypassColorMixer=false;});RefreshColors();}));colorSection.Body.Controls.Add(resets);
         textureSection.Body.Controls.AddRange([banding,mixing,preferDark]);
@@ -257,11 +261,8 @@ public sealed class MainForm : Form
     private void EditText()
     {
         if (Canvas.Selected is not { Kind: "text" } l) return;
-        using var dialog = new Form { Text = Ui.Text("编辑文字"), Width = 480, Height = 270, StartPosition = FormStartPosition.CenterParent, Font = Font, MinimizeBox = false, MaximizeBox = false };
-        var input = new TextBox { Multiline = true, Dock = DockStyle.Fill, Text = l.Text, Margin = new Padding(12) };
-        var ok = new Button { Text = Ui.Text("确定"), Dock = DockStyle.Bottom, Height = 40, DialogResult = DialogResult.OK };
-        dialog.Controls.Add(input); dialog.Controls.Add(ok); dialog.AcceptButton = ok;
-        if (dialog.ShowDialog(this) == DialogResult.OK) { PushUndo(); l.Text = input.Text; Changed(); }
+        using var dialog = new TextEditForm(l.Text);
+        if (dialog.ShowDialog(this) == DialogResult.OK) { PushUndo(); l.Text = dialog.EditedText; Changed(); }
     }
     private void Delete() { if (Canvas.Selected is not { } l) return; PushUndo(); Document.Layers.Remove(l); Select(Document.Layers.LastOrDefault()?.Id); Changed(); }
     private void Duplicate() { if (Canvas.Selected is not { } l) return; PushUndo(); var copy = Document.Clone().Layers.Single(v => v.Id == l.Id); copy.Id = Guid.NewGuid().ToString("N"); copy.Name += Ui.Text(" 副本"); copy.X += 1; copy.Y += 1; Document.Layers.Add(copy); Select(copy.Id); Changed(); }

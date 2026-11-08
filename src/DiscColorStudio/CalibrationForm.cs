@@ -3,11 +3,11 @@ using System.Globalization;
 
 namespace DiscColorStudio;
 
-public sealed class CalibrationForm : Form
+public sealed class CalibrationForm : ResponsiveForm
 {
     private readonly TextBox[] fields = Enumerable.Range(0, 6).Select(_ => new TextBox { Width = 330, ReadOnly = true, TabStop = false }).ToArray();
-    private readonly Label selectedFile = new() { AutoSize = true, MaximumSize = new Size(590, 0), ForeColor = Color.SlateGray };
-    private readonly CheckBox completed = new() { Text = Ui.Text("我已在 DIS 完成这类盘片的几何校准，并将最终参数应用到此工程后保存。"), AutoSize = true, MaximumSize = new Size(590, 0), Enabled = false };
+    private readonly Label selectedFile = new() { AutoSize = true, ForeColor = Color.SlateGray };
+    private readonly WrappingCheckBox completed = new() { Text = Ui.Text("我已在 DIS 完成这类盘片的几何校准，并将最终参数应用到此工程后保存。"), AutoSize = true, Enabled = false };
     private readonly Button apply = new() { Text = Ui.Text("应用校准并开始设计"), AutoSize = true, Enabled = false };
     private Geometry? imported;
     private string importedName = "";
@@ -19,16 +19,16 @@ public sealed class CalibrationForm : Form
     {
         Result = design.Clone(); ProjectPath = projectPath;
         Text = Ui.Text("开始之前 · 导入 DIS 盘面几何校准");
-        ClientSize = new Size(670, Ui.IsEnglish ? 750 : 660); Font = new Font("Microsoft YaHei UI", 10);
-        StartPosition = FormStartPosition.CenterScreen; FormBorderStyle = FormBorderStyle.FixedDialog;
+        ClientSize = new Size(670, 720); MinimumSize = new Size(420, 340);
+        StartPosition = FormStartPosition.CenterScreen;
         MaximizeBox = false; MinimizeBox = false;
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(22, 18, 22, 14), FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        Controls.Add(panel);
-        void Note(string text, bool bold = false) => panel.Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(610, 0), Font = bold ? new Font(Font, FontStyle.Bold) : Font, Margin = new Padding(0, 0, 0, 10) });
+        var panel = new VerticalStack();
+        Controls.Add(LayoutUi.ScrollBody(panel, 22));
+        void Note(string text, bool bold = false) => panel.Controls.Add(new Label { Text = text, AutoSize = true, Font = bold ? new Font(Font, FontStyle.Bold) : Font, Margin = new Padding(0, 0, 0, 10) });
         Note(Ui.Text("请先在 DiscImageStudio（DIS）完成 DVD 盘面几何校准"), true);
         Note(Ui.Text("1. 使用准备刻录的同型号盘片，在 DIS 完成边界与精确标定。\n2. 将最终标定参数应用到 DVD 绘图工程，再保存工程（Ctrl+S）。\n3. 在下方导入这个工程，例如「我的DVD校准.discproj」。"));
         Note(Ui.Text("需要的文件：.discproj 绘图工程\nDIS 默认保存位置：文档 → DiscImageStudio Projects"), true);
-        var links = new FlowLayoutPanel { Width = 610, AutoSize = true, WrapContents = true, Margin = new Padding(0, 0, 0, 10) };
+        var links = new WrappingFlowPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = new Padding(0, 0, 0, 10) };
         var site = new LinkLabel { Text = Ui.Text("打开 DIS 项目与教程"), AutoSize = true, Margin = new Padding(0, 0, 22, 0) };
         site.LinkClicked += (_, _) => { try { Process.Start(new ProcessStartInfo("https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio") { UseShellExecute = true }); } catch (Exception e) { Error(e); } };
         links.Controls.Add(site);
@@ -46,22 +46,22 @@ public sealed class CalibrationForm : Form
         string[] labels = [Ui.Text("内半径 / mm"), Ui.Text("外半径 / mm"), Ui.Text("扇区数（2048 字节/扇区）"), Ui.Text("轨距一次系数"), Ui.Text("轨距二次系数"), Ui.Text("轨距三次系数")];
         for (int i = 0; i < 6; i++)
         {
-            var row = new FlowLayoutPanel { Width = 610, Height = 31, WrapContents = false, Margin = new Padding(0) };
-            row.Controls.Add(new Label { Text = labels[i], Width = 235, Height = 28, TextAlign = ContentAlignment.MiddleLeft });
-            fields[i].AccessibleName = labels[i]; row.Controls.Add(fields[i]); panel.Controls.Add(row);
+            var row = new TableLayoutPanel { ColumnCount = 2, RowCount = 1, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Margin = Padding.Empty };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43)); row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 57));
+            row.Controls.Add(new Label { Text = labels[i], AutoSize = true, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+            fields[i].AccessibleName = labels[i]; fields[i].Dock = DockStyle.Fill; row.Controls.Add(fields[i], 1, 0); panel.Controls.Add(row);
         }
         completed.Margin = new Padding(0, 12, 0, 10); panel.Controls.Add(completed);
         completed.CheckedChanged += (_, _) => apply.Enabled = imported is not null && completed.Checked;
-        var buttons = new FlowLayoutPanel { Width = 610, AutoSize = true, Margin = new Padding(0) };
         apply.Click += (_, _) =>
         {
             if (imported is null || !completed.Checked) return;
             CalibrationFiles.ApplyImport(Result, imported, importedName);
             CalibrationChanged = true; DialogResult = DialogResult.OK;
         };
-        buttons.Controls.Add(apply);
         var cancel = new Button { Text = allowOpenProject ? Ui.Text("退出") : Ui.Text("取消"), AutoSize = true, DialogResult = DialogResult.Cancel };
-        buttons.Controls.Add(cancel); panel.Controls.Add(buttons); CancelButton = cancel; AcceptButton = apply;
+        Controls.Add(LayoutUi.Buttons(apply, cancel)); CancelButton = cancel; AcceptButton = apply;
+        CompleteLayout();
     }
 
     private void ImportProject()

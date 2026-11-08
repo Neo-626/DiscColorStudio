@@ -1,35 +1,36 @@
 using System.Security.Cryptography;
 using DiscImageStudio.Burning;
 namespace DiscColorStudio;
-public sealed class BurnForm:Form
+public sealed class BurnForm:ResponsiveForm
 {
     private sealed record DeviceChoice(OpticalBurnDevice Device){public override string ToString()=>Device.DisplayName;}
     private sealed record SpeedChoice(OpticalWriteSpeed Speed){public override string ToString()=>$"{Speed.GetMultiplier(OpticalBurnMediaKind.DvdData):0.#}×";}
     private readonly Design design;private readonly WindowsImapiBurner backend=new();
     private readonly ComboBox devices=new(){Width=440,DropDownStyle=ComboBoxStyle.DropDownList},speeds=new(){Width=140,DropDownStyle=ComboBoxStyle.DropDownList};
     private readonly TextBox imagePath=new(){Width=475};
-    private readonly Label medium=new(){AutoSize=true,MaximumSize=new Size(620,0)},status=new(){AutoSize=true,MaximumSize=new Size(620,0)};
+    private readonly Label medium=new(){AutoSize=true},status=new(){AutoSize=true};
     private readonly ProgressBar progress=new(){Width=620,Height=24,Maximum=1000};
     private readonly Button refresh=new(){Text=Ui.Text("刷新光驱"),AutoSize=true},browse=new(){Text=Ui.Text("选择…"),AutoSize=true},generate=new(){Text=Ui.Text("生成 ISO"),AutoSize=true},burn=new(){Text=Ui.Text("烧录光盘"),AutoSize=true},cancel=new(){Text=Ui.Text("取消生成"),AutoSize=true,Enabled=false},close=new(){Text=Ui.Text("关闭"),AutoSize=true};
     private bool busy,writing,loading;private int refreshVersion;private EncodedImage? encoded;private CancellationTokenSource? cancellation;
     public BurnForm(Design snapshot)
     {
         if(!snapshot.HasDisCalibration)throw new InvalidOperationException(Ui.Text("请先导入 DIS 校准后的 DVD 绘图工程（.discproj）。"));
-        design=snapshot;Text=Ui.Text("烧录光盘");ClientSize=new Size(680,500);Font=new Font("Microsoft YaHei UI",10);StartPosition=FormStartPosition.CenterParent;MinimumSize=new Size(700,540);
-        var panel=new FlowLayoutPanel{Dock=DockStyle.Fill,Padding=new Padding(22),FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true};Controls.Add(panel);
-        panel.Controls.Add(new Label{Text=Ui.Format("{0}\n{1} 张图片 · {2:N0} 格 · {3:0.00} GB\n校准：{4}",design.Name,design.Layers.Count(l=>l.Kind=="image"),design.ExportRasterSize,design.Geometry.Sectors*2048/1e9,design.CalibrationName),AutoSize=true,MaximumSize=new Size(620,0),Margin=new Padding(0,0,0,12)});
-        FlowLayoutPanel Row(params Control[] children){var row=new FlowLayoutPanel{Width=630,Height=40,WrapContents=false};row.Controls.AddRange(children);panel.Controls.Add(row);return row;}
+        design=snapshot;Text=Ui.Text("烧录光盘");ClientSize=new Size(680,540);StartPosition=FormStartPosition.CenterParent;MinimumSize=new Size(420,340);
+        var panel=new VerticalStack();Controls.Add(LayoutUi.ScrollBody(panel,22));
+        panel.Controls.Add(new Label{Text=Ui.Format("{0}\n{1} 张图片 · {2:N0} 格 · {3:0.00} GB\n校准：{4}",design.Name,design.Layers.Count(l=>l.Kind=="image"),design.ExportRasterSize,design.Geometry.Sectors*2048/1e9,design.CalibrationName),AutoSize=true,Margin=new Padding(0,0,0,12)});
+        void Row(Control input,Control action)=>panel.Controls.Add(LayoutUi.InputRow(input,action));
         Row(devices,refresh);Row(new Label{Text=Ui.Text("刻录速度"),AutoSize=true},speeds);panel.Controls.Add(medium);
         panel.Controls.Add(new Label{Text=Ui.Text("镜像保存位置"),AutoSize=true,Margin=new Padding(0,15,0,0)});Row(imagePath,browse);
         imagePath.Text=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"Disc Color Studio",$"disc-{DateTime.Now:yyyyMMdd-HHmmss}.iso");
-        panel.Controls.Add(new Label{Text=Ui.Text("放入空白 DVD-R，选择光驱和速度。点击“烧录光盘”，程序会生成镜像并完成刻录。"),AutoSize=true,MaximumSize=new Size(620,0),Margin=new Padding(0,10,0,14)});
-        Row(generate,burn,cancel,close);panel.Controls.Add(progress);panel.Controls.Add(status);
+        panel.Controls.Add(new Label{Text=Ui.Text("放入空白 DVD-R，选择光驱和速度。点击“烧录光盘”，程序会生成镜像并完成刻录。"),AutoSize=true,Margin=new Padding(0,10,0,14)});
+        panel.Controls.Add(generate);Controls.Add(LayoutUi.Buttons(burn,cancel,close));panel.Controls.Add(progress);panel.Controls.Add(status);CancelButton=close;
         browse.Click+=(_,_)=>{using var dialog=new SaveFileDialog{Filter=Ui.Text("DVD 镜像|*.iso"),FileName=Path.GetFileName(imagePath.Text),OverwritePrompt=false};if(dialog.ShowDialog(this)==DialogResult.OK){imagePath.Text=dialog.FileName;encoded=null;}};
         imagePath.TextChanged+=(_,_)=>encoded=null;
         refresh.Click+=async(_,_)=>await RefreshDevices();devices.SelectedIndexChanged+=async(_,_)=>{if(!loading)await RefreshMedium();};
         generate.Click+=async(_,_)=>await Run(false);burn.Click+=async(_,_)=>await Run(true);cancel.Click+=(_,_)=>cancellation?.Cancel();close.Click+=(_,_)=>Close();
         FormClosing+=(_,e)=>{if(!busy)return;e.Cancel=true;if(!writing)cancellation?.Cancel();status.Text=writing?Ui.Text("正在写盘，请等待光驱收尾。"):Ui.Text("正在取消生成，请稍候…");};
         Shown+=async(_,_)=>await RefreshDevices();
+        CompleteLayout();
     }
     private async Task RefreshDevices()
     {

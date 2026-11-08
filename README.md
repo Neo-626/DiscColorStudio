@@ -132,6 +132,8 @@ Calibration is saved with your color project. On later launches, choose **Open a
 3. Drag the image to move it, drag its corners to resize it, and drag the round handle above it to rotate it. Place the content you want to keep within the burgundy writable ring.
 4. Expand **Layout** in the right sidebar to enter physical dimensions. A width of `28`, for example, means **28 mm** on the disc. Keep **Maintain aspect ratio** checked to preserve the image's proportions.
 
+Drag the vertical dividers between the canvas and either sidebar to adjust their widths. Scroll the right sidebar to reach more controls in a smaller window.
+
 ![Editor and Layout panel: select layers on the left, arrange on the canvas, and enter dimensions on the right](docs/guide/en/05-layout.png)
 
 | Control | How to use it |
