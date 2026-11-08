@@ -57,7 +57,7 @@ internal sealed class AdjustmentSlider : UserControl, ILocalizedControl
     public override Size GetPreferredSize(Size proposedSize)
     {
         if (caption is null) return base.GetPreferredSize(proposedSize);
-        int width = proposedSize.Width > 0 ? proposedSize.Width : Width;
+        int width = Math.Min(proposedSize.Width > 0 ? proposedSize.Width : Width, MaximumSize.Width > 0 ? MaximumSize.Width : Width);
         var m = Metrics(width); return new Size(width, m.rowHeight + m.trackHeight + LayoutUi.Px(this, 5));
     }
     protected override void OnLayout(LayoutEventArgs e)

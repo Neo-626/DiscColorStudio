@@ -30,17 +30,29 @@ public class ResponsiveForm : Form
     }
 }
 
-internal class VerticalStack : TableLayoutPanel
+internal class VerticalStack : FlowLayoutPanel
 {
+    private bool fitting;
     internal VerticalStack()
     {
-        ColumnCount = 1; RowCount = 0; GrowStyle = TableLayoutPanelGrowStyle.AddRows;
-        ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        FlowDirection = FlowDirection.TopDown; WrapContents = false;
         AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink; Dock = DockStyle.Top;
         Margin = Padding.Empty;
     }
-    private bool fitting;
-    protected override void OnLayout(LayoutEventArgs e)
+    protected override void OnSizeChanged(EventArgs e) { base.OnSizeChanged(e); FitChildren(); }
+    protected override void OnPaddingChanged(EventArgs e) { base.OnPaddingChanged(e); FitChildren(); }
+    protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); FitChildren(); }
+    protected override void OnDpiChangedAfterParent(EventArgs e) { base.OnDpiChangedAfterParent(e); FitChildren(); }
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        if (e.Control is { } child)
+        {
+            child.Dock = DockStyle.None; child.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            if (child is UpDownBase or ComboBox || child is TextBox { Multiline: false }) child.AutoSize = true;
+        }
+        base.OnControlAdded(e); FitChildren();
+    }
+    private void FitChildren()
     {
         if (fitting) return;
         fitting = true;
@@ -48,15 +60,28 @@ internal class VerticalStack : TableLayoutPanel
         {
             int available = Math.Max(1, ClientSize.Width - Padding.Horizontal);
             foreach (Control child in Controls)
-                child.MaximumSize = new Size(Math.Max(1, available - child.Margin.Horizontal), 0);
-            base.OnLayout(e);
+            {
+                int width = Math.Max(1, available - child.Margin.Horizontal);
+                int height = child switch
+                {
+                    UpDownBase input => input.PreferredHeight,
+                    ComboBox input => input.PreferredHeight,
+                    TextBox input when !input.Multiline => input.PreferredHeight,
+                    _ => child.MinimumSize.Height
+                };
+                // Fixed-height native inputs must retain their specified height in the flow layout.
+                var minimum = new Size(width, height);
+                if (child.MinimumSize != minimum || child.MaximumSize.Width != width)
+                {
+                    child.MinimumSize = Size.Empty;
+                    child.MaximumSize = new Size(width, 0);
+                    child.MinimumSize = minimum;
+                }
+                if (child.Width != width) child.Width = width;
+                if (child is UpDownBase or ComboBox || child is TextBox { Multiline: false }) child.Height = height;
+            }
         }
         finally { fitting = false; }
-    }
-    protected override void OnControlAdded(ControlEventArgs e)
-    {
-        if (e.Control is { } child) child.Dock = DockStyle.Top;
-        base.OnControlAdded(e);
     }
 }
 
@@ -80,26 +105,14 @@ internal sealed class WrappingFlowPanel : FlowLayoutPanel
 
 internal sealed class WrappingCheckBox : CheckBox
 {
-    private bool hot;
     public override Size GetPreferredSize(Size proposedSize)
     {
-        int glyph = LayoutUi.Px(this, 22), width = Math.Max(glyph + 1, proposedSize.Width > 0 ? proposedSize.Width : Width);
-        var text = TextRenderer.MeasureText(Text, Font, new Size(Math.Max(1, width - glyph - Padding.Horizontal), int.MaxValue), TextFormatFlags.WordBreak);
-        return new Size(Math.Min(width, text.Width + glyph + Padding.Horizontal), Math.Max(LayoutUi.Px(this, 20), text.Height + LayoutUi.Px(this, 4)) + Padding.Vertical);
+        int glyph = LayoutUi.Px(this, 22);
+        int width = Math.Max(glyph + 1, Math.Min(proposedSize.Width > 0 ? proposedSize.Width : Width, MaximumSize.Width > 0 ? MaximumSize.Width : Width));
+        var text = TextRenderer.MeasureText(Text, Font, new Size(Math.Max(1, width - glyph - Padding.Horizontal), int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+        return new Size(width, Math.Max(LayoutUi.Px(this, 20), text.Height + LayoutUi.Px(this, 4)) + Padding.Vertical);
     }
-    protected override void OnMouseEnter(EventArgs e) { hot = true; base.OnMouseEnter(e); Invalidate(); }
-    protected override void OnMouseLeave(EventArgs e) { hot = false; base.OnMouseLeave(e); Invalidate(); }
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        var state = Checked
-            ? (!Enabled ? System.Windows.Forms.VisualStyles.CheckBoxState.CheckedDisabled : hot ? System.Windows.Forms.VisualStyles.CheckBoxState.CheckedHot : System.Windows.Forms.VisualStyles.CheckBoxState.CheckedNormal)
-            : (!Enabled ? System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedDisabled : hot ? System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedHot : System.Windows.Forms.VisualStyles.CheckBoxState.UncheckedNormal);
-        var glyph = CheckBoxRenderer.GetGlyphSize(e.Graphics, state);
-        CheckBoxRenderer.DrawCheckBox(e.Graphics, new Point(Padding.Left, Padding.Top + Math.Max(0, (Font.Height - glyph.Height) / 2)), state);
-        var text = new Rectangle(Padding.Left + LayoutUi.Px(this, 22), Padding.Top, Math.Max(1, ClientSize.Width - Padding.Horizontal - LayoutUi.Px(this, 22)), Math.Max(1, ClientSize.Height - Padding.Vertical));
-        TextRenderer.DrawText(e.Graphics, Text, Font, text, Enabled ? ForeColor : SystemColors.GrayText, TextFormatFlags.WordBreak | TextFormatFlags.PreserveGraphicsClipping);
-        if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(e.Graphics, text);
-    }
+
 }
 
 internal static class LayoutUi
