@@ -1,0 +1,16 @@
+bin/
+obj/
+artifacts/
+publish/
+.vs/
+*.user
+*.suo
+*.pdb
+*.iso
+*.partial-*
+*.tmp-*
+*.discolor
+*.discproj
+*.zip
+Thumbs.db
+.DS_Store

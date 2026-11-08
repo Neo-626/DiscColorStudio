@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disc Color Studio · 实盘演示</title><style>
+*{box-sizing:border-box}body{margin:0;background:#10151e;color:#e9edf4;font:17px/1.8 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1080px;margin:auto;padding:48px 24px 72px}h1{font-size:40px;line-height:1.2;margin:8px 0 18px}h2{font-size:25px;line-height:1.4;margin:36px 0 14px}a{color:#8bc9ff}p{max-width:850px}.label{color:#9caec3;font-size:14px;letter-spacing:2px}.note{padding:18px 22px;border-left:4px solid #e1bc78;background:#23242a;border-radius:0 8px 8px 0}video,.hero{width:100%;display:block;background:#000;border-radius:10px}figure{margin:20px 0}figcaption{font-size:14px;color:#adb9ca;margin-top:8px}.gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.gallery img{display:block;width:100%;border-radius:8px}.gallery figure{margin:0}li{margin:10px 0}footer{margin-top:42px;padding-top:20px;border-top:1px solid #344052;color:#adb9ca;font-size:14px}@media(max-width:620px){main{padding:28px 18px}h1{font-size:32px}.gallery{grid-template-columns:1fr}}
+
+table{width:100%;border-collapse:collapse}td,th{padding:8px;vertical-align:top}td img{max-width:100%;height:auto}main>p>img{max-width:100%;height:auto}.formula{padding:16px 20px;background:#1d2735;border-radius:8px;overflow-x:auto}blockquote{margin:20px 0;padding-left:20px;border-left:3px solid #344052}</style></head><body><main><h1>Disc Color Studio</h1>
+<p>在普通 <strong>DVD-R 数据面</strong>上刻录彩色图案的 Windows 工具。基于 <a href="https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio">DiscImageStudio（DIS）</a> 的 DVD 编码与刻录组件，增加实测角度色表、彩色映射、纹理混合和图层编辑。</p>
+<h2>实盘演示</h2>
+<p>四幅插画的原图与实盘局部对照。</p>
+<table>
+<tr>
+<td width="50%" align="center">
+<a href="media/comparison-klukai.png"><img src="media/comparison-klukai.png" width="440" alt="GF2 Klukai 原图与实盘局部对照"></a><br>
+</td>
+<td width="50%" align="center">
+<a href="media/comparison-ak12.png"><img src="media/comparison-ak12.png" width="440" alt="AK-12 原图与实盘局部对照"></a><br>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<a href="media/comparison-untitled.png"><img src="media/comparison-untitled.png" width="440" alt="无题 原图与实盘局部对照"></a><br>
+</td>
+<td width="50%" align="center">
+<a href="media/comparison-anna.png"><img src="media/comparison-anna.png" width="440" alt="八奈見杏菜 原图与实盘局部对照"></a><br>
+</td>
+</tr>
+</table>
+
+<p>实盘局部仅裁剪、旋转方向和缩放，未调整颜色、曝光或锐度，并确认视觉效果和图片一致。四组照片呈现了不同色域下的色彩表现。</p>
+<video controls playsinline preload="metadata" poster="media/effect-06.jpg"><source src="media/viewing-angle.mp4" type="video/mp4"></video>
+
+<p><strong>角度演示。</strong> <a href="media/viewing-angle.mp4">备用 MP4 文件</a> · <a href="https://github.com/Neo-626/DiscColorStudio/raw/refs/heads/main/docs/media/viewing-angle.mp4">下载视频</a></p>
+<p>照片展示较合适角度下的效果；可以看到，图片颜色仅在很窄的范围内可以在碟片上还原，稍微偏离颜色较准的角度就会偏色。所以不要对这个项目抱太大期望，通常你需要花几分钟摆弄光盘来找到最佳观测角度。（个人经验：盘摆在桌子上，正对盘做好。拿个白光单led手电，光束垂直桌面，指向光盘中心圆孔，然后缓慢竖直上移，观察右侧的图案，在某个高度色彩就会复原）</p>
+<p>演示中的第三方插画见下方<a href="#演示插画来源与声明">作者、原作链接与权利声明</a>。</p>
+<details>
+<summary>展开 4 张完整实盘照片</summary>
+
+<div class="gallery">
+<a href="media/effect-03.jpg"><img loading="lazy" src="media/effect-03.jpg" alt="实盘照片 3"></a>
+<a href="media/effect-04.jpg"><img loading="lazy" src="media/effect-04.jpg" alt="实盘照片 4"></a>
+<a href="media/effect-05.jpg"><img loading="lazy" src="media/effect-05.jpg" alt="实盘照片 5"></a>
+<a href="media/effect-06.jpg"><img loading="lazy" src="media/effect-06.jpg" alt="实盘照片 6"></a>
+</div>
+
+</details>
+
+<h2>原理</h2>
+<p>DVD-R 的记录层包含可被刻录激光改变的染料，下面配有反射层。刻录时，激光沿预制的螺旋轨道形成一连串光学性质不同的记录标记。标记的长度、间隔和排列既承载数据，也参与决定这个区域如何反射和衍射光线。</p>
+<p>DIS 使用校准后的光盘几何模型，将图像位置映射到螺旋轨道上的数据位置，并通过补偿扇区扰码，将选定的数据纹理送入后续编码。DVD 的 EFMPlus 调制把字节转换为通道码，再由刻录机写成相应的标记与间隔。本项目在这条流程中选择不同的重复字节序列，生成具有不同排列特征的记录结构；纠错码与同步信息也共同构成最终写入的图样。</p>
+<p>白光从相邻微结构返回时，光程差会使同一波长的光发生相长或相消干涉；不同波长满足增强条件的方向各不相同，因此盘片会出现随方向变化的彩色。微结构的排列还会影响各个波长在不同方向上的衍射效率，也就是有多少光进入观察者眼中。</p>
+<p><strong>通过选择不同的记录纹理，改变各波段光进入同一观察方向的相对强度，就能在入射方向和观察方向固定时得到不同颜色。</strong></p>
+<p>在固定照明下，这个过程可用有效光谱响应模型描述：</p>
+<p class="formula">I<sub>t</sub>(λ) = H<sub>t</sub>(λ; θ<sub>i</sub>, θ<sub>o</sub>, φ)</p>
+
+<p>其中，<span>H<sub>t</sub></span> 是包含固定照明影响的纹理 <span>t</span> 在指定入射方向 <span>θ<sub>i</sub></span>、观察方向 <span>θ<sub>o</sub></span> 和局部轨道方位 <span>φ</span> 下的有效光谱响应，<span>I<sub>t</sub></span> 是进入观察方向的光谱。人眼或相机对这个光谱的不同波段作加权响应，形成所见颜色。同一纹理随盘片转动而变色，是因为它相对光源和观察方向的方位改变，进而改变了 <span>H<sub>t</sub></span>。盘面不同位置的轨道方向也不同，因此颜色映射需要同时考虑纹理和位置。</p>
+<p>在实际操作中，<strong>构建了一个特定角度下的经验色表</strong>：记录“纹理编号 + 相对角度 → 拍到的颜色”，再根据图片目标颜色和盘面位置，选择该角度下合适的纹理。一个目标颜色可以由多种纹理按比例混合：软件把它们分配到相邻轨道上的细密区域，人眼或相机在观察尺度上对这些区域的光进行平均。程序在线性 RGB 空间中用加权和估算混色：</p>
+<p class="formula">C<sub>mix</sub>(φ) ≈ Σ<sub>j</sub> w<sub>j</sub> C<sub>j</sub>(φ), &nbsp; w<sub>j</sub> ≥ 0, &nbsp; Σ<sub>j</sub> w<sub>j</sub> = 1</p>
+
+<p><span>C<sub>j</sub>(φ)</span> 是该角度下第 <span>j</span> 种纹理的实测线性 RGB，<span>w<sub>j</sub></span> 是分配给它的比例。调节这些比例可以补充单一纹理之间的中间色与明暗层次；让相邻角度的配方连续过渡，可以减轻纹理切换形成的条带。深色和轮廓可结合 DIS 灰阶纹理处理。各纹理的实测颜色及其可实现的混色共同构成该角度的可用色域，软件在这个范围内逼近图片的目标颜色。</p>
+<p><img alt="纹理搜索盘实拍局部，仅供演示" src="https://github.com/user-attachments/assets/b3ff7f11-5cff-44f4-9432-139fd0a04666" /></p>
+<blockquote>
+<p><strong>搜索盘实拍，仅供演示。</strong> 图中的密集色块用于搜索纹理和颜色。此搜索盘的生成工具、工程、ISO 及原始校准照片集<strong>不包含在仓库或发行包中</strong>。软件运行所需的处理后数值色表仍随程序提供。</p>
+</blockquote>
+<p>我们在完成 DIS 几何校准的盘片上，刻录大量带编号的候选纹理；固定灯光和相机，逐步旋转盘片拍摄，再通过网格配准、取色和人工核对，建立“纹理、相对角度与颜色”的对应关系。比较各角度的白色候选和可用色域后，选取颜色较丰富的连续约 60° 区间，作为软件配色与纹理混合的依据。</p>
+<p>我知道这个方法有些蠢。我也尝试构建模型来构建纹理到颜色的映射，但是始终准确率停留在40%上下，所以暂时不采用。也许之后模型准确率上来了，我会更新这个软件替换掉经验色表。</p>
+<h2>测试盘片与结果分享</h2>
+<p>实盘演示与内置色表使用的是<strong>美国版威宝（Verbatim）95058 DVD-R，标称 16×，实际以 4× 刻录</strong>。</p>
+<p>其他品牌、型号的盘片尚未测试。从原理上看，这种纹理显色与实测配色方法也应能用于其他兼容 DIS 的 DVD-R。</p>
+<p>欢迎测试过其他盘片的朋友通过 <a href="https://github.com/Neo-626/DiscColorStudio/issues/new">Issue</a> 分享结果，包括盘片品牌和型号、光驱及刻录速度、光照条件，以及实拍照片或转动视频。</p>
+<h2 id="演示插画来源与声明">演示插画来源与声明</h2>
+<p>实盘照片和视频使用了以下作品作为图案，感谢各位创作者。页码从第 1 张开始计算。</p>
+<table>
+<thead>
+<tr>
+<th>作品</th>
+<th>作者／发布者</th>
+<th>演示使用的图片</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://www.pixiv.net/artworks/134992243">GF2 Klukai</a></td>
+<td><a href="https://www.pixiv.net/users/112251818">gcmsfromisland</a></td>
+<td>第 2 张（p1）</td>
+</tr>
+<tr>
+<td><a href="https://www.pixiv.net/artworks/133822252">AK-12</a></td>
+<td><a href="https://www.pixiv.net/users/118918672">BatonKhleba</a></td>
+<td>第 1 张（p0）</td>
+</tr>
+<tr>
+<td><a href="https://www.pixiv.net/artworks/131999367">HK416</a></td>
+<td><a href="https://www.pixiv.net/users/89801761">momostima</a></td>
+<td>唯一一张（p0）</td>
+</tr>
+<tr>
+<td><a href="https://www.pixiv.net/artworks/124941070">八奈見杏菜『地雷系美少女 八奈见酱』</a></td>
+<td><a href="https://www.pixiv.net/users/29258872">黑木kuro</a></td>
+<td>第 1 张（p0）</td>
+</tr>
+</tbody>
+</table>
+<p>以上插画用于展示 DVD-R 刻录与实盘显色效果，相关插画及角色权利归各自权利人。</p>
+<p><strong>权利人联系与移除：</strong> 如权利人认为演示照片、视频或其他展示涉及侵权，请通过 <a href="https://github.com/Neo-626/DiscColorStudio/issues/new">项目 Issue</a> 联系，注明原作链接和涉及的展示位置。我们会及时核实并移除相关素材。</p>
+<h2>Vibe coding</h2>
+<p>本项目完全由 AI 完成。</p><footer><a href="https://github.com/Neo-626/DiscColorStudio">项目仓库</a> · <a href="使用说明.html">使用说明</a> · <a href="../LICENSE">GNU GPL v3</a></footer></main></body></html>

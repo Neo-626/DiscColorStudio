@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disc Color Studio · 使用说明</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#253244;font:16px/1.85 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1160px;margin:32px auto;padding:36px 44px;background:#fff;border-radius:16px}h1{font-size:30px;margin:0 0 18px}h3{font-size:24px;margin:44px 0 16px;padding-top:12px;border-top:1px solid #dde4ed}p{margin:12px 0}li{margin:8px 0}a{color:#1465b8}code,kbd{background:#edf1f6;border-radius:4px;padding:2px 6px;font:inherit;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:24px auto;border:1px solid #dbe2ec;border-radius:6px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:12px;text-align:left;vertical-align:top;border:1px solid #e0e5ed}th{background:#f1f4f8}footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e5ed;font-size:14px;color:#65748a}@media(max-width:650px){main{margin:0;padding:20px 16px;border-radius:0}table{font-size:14px}th,td{padding:8px}h3{font-size:21px}}
+</style></head><body><main><nav><a href="UserGuide.html">English</a> | <a href="使用说明.html">简体中文</a></nav><h1>Disc Color Studio · 使用说明</h1>
+<p>按以下八步制作彩色光盘。截图中的红框标出对应控件，点击图片可放大。</p>
+<h3>1. 下载程序，准备盘片与光驱</h3>
+<ol>
+<li>从 <a href="https://github.com/Neo-626/DiscColorStudio/releases">Releases</a> 打开最新版本，在 <strong>Assets</strong> 中下载名称含 <code>win-x64.zip</code> 的 Windows 便携包。</li>
+<li>将压缩包完整解压到一个文件夹，运行其中的 <strong><code>DiscColorStudio.exe</code></strong>。保留旁边的 <code>data</code>、<code>guide</code> 和其他程序文件。</li>
+<li>启动时选择 <strong>简体中文</strong>，点击 <strong>Continue / 继续</strong>。程序记住上次选择；编辑时也可通过 <strong>帮助 → 语言…</strong> 即时切换。</li>
+<li>准备支持 DVD-R 刻录的光驱、用于校准的盘片，以及一张用于正式设计的<strong>新空白单层 DVD-R</strong>。校准与正式刻录使用同型号盘片。</li>
+</ol>
+<p>准备一盏白光 LED 灯，供完成后观察效果。</p>
+<p><img alt="启动时选择 English 或简体中文" src="guide/00-language.png" /></p>
+<h3>2. 在 DIS 完成几何校准，导入保存好的工程</h3>
+<p><strong>几何校准</strong>用于确定光盘上“哪个数据位置对应哪个图像位置”。请先用 <a href="https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio">DiscImageStudio（DIS）</a> 完成这一步。</p>
+<ol>
+<li>按 <a href="https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio/blob/3a5cde635c182d6a7e01ff99c2cc1be2ac3ab668/docs/CALIBRATION_TUTORIAL.md">DIS v1.4.0 校准教程</a> 完成盘片标定：先确定初始几何参数，再进行边界与精确标定。</li>
+<li>将最终标定参数应用到 DIS 的 <strong>DVD 绘图工程</strong>，按 <strong>Ctrl+S</strong> 保存，得到扩展名为 <strong><code>.discproj</code></strong> 的文件，例如 <code>我的DVD校准.discproj</code>。默认位置是 <strong>文档 → DiscImageStudio Projects</strong>。</li>
+<li>启动 Disc Color Studio，在下面的引导窗口点击 <strong>选择 DIS 校准工程（.discproj）…</strong>，选中刚保存的文件。</li>
+<li>程序会显示读取到的盘面参数。确认这个工程已应用最终标定结果，勾选确认框，再点 <strong>应用校准并开始设计</strong>。</li>
+</ol>
+<p><img alt="启动引导：选择 DIS 的 .discproj，确认校准后进入设计" src="guide/01-calibration.png" /></p>
+<p>程序会自动读取<strong>内半径、外半径、扇区数和三项轨距系数</strong>：前两项确定绘图环带，扇区数决定写入的数据容量，轨距系数描述螺旋轨道的位置变化。</p>
+<p>校准结果会随彩色工程保存。以后启动时点 <strong>打开已有的彩色工程…</strong> 继续编辑；更换盘片型号时，点主界面顶部的 <strong>DIS 校准…</strong> 导入对应工程。</p>
+<h3>3. 导入图片，摆放到盘面上</h3>
+<ol>
+<li>点击左上角 <strong>导入图片</strong>，选择一张或多张图片；也可以把图片拖进窗口。</li>
+<li>在画布上或左侧图层列表中点击图片。出现蓝色边框后，右侧面板调整的就是这张图片。</li>
+<li>拖动图片移动位置，拖动四角缩放，拖动图片上方的圆形手柄旋转。把需要保留的内容放在盘面酒红色的可写环带内。</li>
+<li>点击右侧 <strong>布局</strong> 标题展开面板，填写实际尺寸；例如宽度填 <code>28</code>，表示在盘上占 <strong>28 mm</strong>。保持 <strong>保持宽高比</strong> 勾选，可按原比例缩放。</li>
+</ol>
+<p><img alt="主界面与布局：左侧选择图层，画布拖动排版，右侧填写尺寸和旋转" src="guide/05-layout.png" /></p>
+<table>
+<thead>
+<tr>
+<th>控件</th>
+<th>怎么使用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中心 X / Y</td>
+<td>以盘心为原点，单位为 mm；X 向右为正，Y 向下为正。需要对齐时直接填写数值。</td>
+</tr>
+<tr>
+<td>宽度 / 高度、旋转</td>
+<td>设置成品尺寸和方向。按住 Shift 拖动旋转柄，可按 15° 调整。</td>
+</tr>
+<tr>
+<td>不透明度</td>
+<td>默认 100%；减小后，图片会与下方图层或盘面背景混合。</td>
+</tr>
+<tr>
+<td>左侧上移 / 下移</td>
+<td>改变图层叠放顺序。勾选框控制图层显示，复制按钮可建立另一份对照。</td>
+</tr>
+<tr>
+<td>添加文字、矩形、椭圆</td>
+<td>在顶部工具栏添加，选中后在「布局」中编辑内容、尺寸与填充颜色。</td>
+</tr>
+<tr>
+<td>整盘 / 设计区</td>
+<td>切换查看范围；滚轮缩放画布，按住鼠标中键拖动平移。</td>
+</tr>
+</tbody>
+</table>
+<p><strong>连续彩色</strong>会自动根据图片内容和盘面位置选择观看方向与纹理配方。画布展示各张图片分别处于适合观看方向时的预测效果；实盘上通过转动盘片依次观看。</p>
+<h3>4. 在「光线」中调整整体明暗</h3>
+<p>选中图片，展开 <strong>光线</strong>，拖动滑块或输入数值调整明暗。</p>
+<p><img alt="光线面板：曝光、亮度、对比度，以及同步按钮" src="guide/02-editor-light.png" /></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>作用</th>
+<th>起步设置与调整方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>曝光</td>
+<td>按比例放大或减小输入图像信号，100% 保持原值。</td>
+<td>默认 <strong>100%</strong>。整体偏暗时，可从 <strong>110%～130%</strong> 试起；边调边看脸部、白底和高光的层次。</td>
+</tr>
+<tr>
+<td>亮度</td>
+<td>整体增加或减少亮度值。</td>
+<td>默认 <strong>0</strong>。小幅提亮可试 <strong>+5～+10</strong>，需要压暗则向负值调。</td>
+</tr>
+<tr>
+<td>对比度</td>
+<td>调整亮部与暗部的差距。</td>
+<td>默认 <strong>100%</strong>。画面发灰可试 <strong>110%～120%</strong>；想保留更多高光和暗部层次，可降到 <strong>90%</strong> 附近比较。</td>
+</tr>
+</tbody>
+</table>
+<p>点击 <strong>重置光线</strong> 可恢复曝光 100%、亮度 0、对比度 100%。</p>
+<h3>5. 在「颜色」中调整整体和指定颜色</h3>
+<p><strong>HSL</strong> 分别是 <strong>色相（Hue）、饱和度（Saturation）、明亮度（Lightness）</strong>。<strong>全部颜色</strong> 同时调整选中图片的所有颜色。八个颜色按钮按输入图片的色相划分区域，方便单独调整衣服、头发等颜色。</p>
+<ol>
+<li>展开 <strong>颜色</strong>，保持 <strong>启用颜色调整</strong> 勾选。</li>
+<li>默认选中 <strong>全部颜色</strong>，拖动三个滑块，调整整张图片的色相、饱和度和明亮度。</li>
+<li>需要细调某类颜色时，点击对应按钮。例如紫色衣服先选 <strong>紫</strong>，偏粉紫的部分也可以调整 <strong>洋红</strong>。</li>
+<li>再点 <strong>全部颜色</strong> 可继续整体调整。整体与各色通道的数值分别保留，并共同生效。</li>
+</ol>
+<p><img alt="颜色面板：全部颜色与八个独立色彩通道" src="guide/03-color.png" /></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>作用与选择方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>色相</td>
+<td>改变颜色倾向。「全部颜色」范围为 <strong>−180°～+180°</strong>，单个色彩通道为 <strong>−60°～+60°</strong>。默认 <strong>0°</strong>，先以 <strong>5°～10°</strong> 小幅调整。</td>
+</tr>
+<tr>
+<td>饱和度</td>
+<td>控制鲜艳程度，范围 <strong>−100～+100</strong>，默认 <strong>0</strong>。颜色较淡可从 <strong>+10～+20</strong> 试起。「全部颜色」调到 <strong>−100</strong> 时整图变为灰阶；增加饱和度时，中性灰保持中性。</td>
+</tr>
+<tr>
+<td>明亮度</td>
+<td>让颜色变亮或变暗，范围 <strong>−100～+100</strong>，默认 <strong>0</strong>，先以 <strong>5～10</strong> 为步长调整。「全部颜色」也会调整黑白灰区域。</td>
+</tr>
+</tbody>
+</table>
+<p>程序先应用各色通道调整，再应用「全部颜色」调整。取消 <strong>启用颜色调整</strong> 可对照调整前后；<strong>重置当前调整</strong> 只复位当前选中的「全部颜色」或色彩通道，<strong>重置全部颜色</strong> 同时复位整体调整和八个通道。</p>
+<h3>6. 在「纹理与细节」中选择混色与精度</h3>
+<p><strong>纹理</strong>是写入 DVD 的细密重复数据图样。程序根据实测色表选择和混合纹理，形成图片的颜色与明暗。</p>
+<p><img alt="纹理与细节面板：条带平滑、自适应混色、暗部增强和采样精度" src="guide/04-texture.png" /></p>
+<table>
+<thead>
+<tr>
+<th>设置</th>
+<th>做什么</th>
+<th>怎么选</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>条带平滑</td>
+<td>平滑相邻盘面角度之间的纹理配方过渡，减轻沿盘面出现的条状颜色分界。</td>
+<td><strong>先用 100%</strong>。需要比较过渡强弱时，复制一张图，将副本设为 50%。</td>
+</tr>
+<tr>
+<td>自适应混色</td>
+<td>把多种相近纹理分配到细密的小区域，用混合后的外观逼近中间色和渐变。</td>
+<td><strong>先用 100%</strong>。想比较较少混色的效果时，可将副本设为 50%，重点看肤色、渐变和轮廓。</td>
+</tr>
+<tr>
+<td>暗部增强 · DIS 灰阶纹理</td>
+<td>在亮度低、色彩较弱的区域加入 DIS 灰阶纹理，增强黑色衣服、阴影和深色轮廓。</td>
+<td>默认关闭。深色区域偏亮或偏彩时，可开启，再检查暗部细节。</td>
+</tr>
+<tr>
+<td>采样精度</td>
+<td>控制生成镜像时，软件读取原图的空间密度。</td>
+<td>一般图片从 <strong>32,768 格</strong> 开始；细线、小字较多时，逐档提高。</td>
+</tr>
+</tbody>
+</table>
+<p><strong>采样精度如何选择：</strong></p>
+<table>
+<thead>
+<tr>
+<th>档位</th>
+<th>软件采样间距</th>
+<th>建议用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32,768</td>
+<td>约 3.66 μm / 格</td>
+<td>日常绘图的起点。</td>
+</tr>
+<tr>
+<td>65,536</td>
+<td>约 1.83 μm / 格</td>
+<td>细发丝、小字、精细轮廓的进一步对照。</td>
+</tr>
+<tr>
+<td>131,072 / 262,144</td>
+<td>约 0.92 / 0.46 μm / 格</td>
+<td>小面积极细内容的高密度取样，生成镜像耗时更长。</td>
+</tr>
+</tbody>
+</table>
+<p>“格”表示把 120 mm 宽的画布划分为对应数量的采样位置。窗口底部的 <strong>预览</strong> 数值用于交互显示，<strong>导出</strong> 数值用于生成镜像。</p>
+<h3>7. 做对照、同步设置，保存彩色工程</h3>
+<ol>
+<li>想在一张盘上比较效果：选中图片，点击左侧 <strong>复制</strong>（或 <strong>Ctrl+D</strong>），把副本移到另一处，再单独调整副本。</li>
+<li>确定一套调整后，点击右栏上方的 <strong>同步到全部图片</strong>。当前图片的光线、整体与八色 HSL、纹理与采样设置会应用到所有图片，并用于后续导入的图片；各图的位置、尺寸、旋转和不透明度保持原值。</li>
+<li>点击 <strong>保存工程</strong>（或 <strong>Ctrl+S</strong>），保存为 <strong><code>.discolor</code></strong>。图片素材、图层排版、调整参数和导入的 DIS 几何校准都会保存进去。</li>
+</ol>
+<p><strong>撤销 / 重做</strong> 支持 Ctrl+Z / Ctrl+Y；整次同步也可以撤销。</p>
+<h3>8. 生成镜像并烧录，转动盘片查看效果</h3>
+<ol>
+<li>将一张新的空白单层 DVD-R 放入光驱，点击顶部 <strong>烧录光盘…</strong>。</li>
+<li>在光驱下拉框中选择刻录机。刚放入盘片时，可以点 <strong>刷新光驱</strong> 更新介质信息。</li>
+<li>选择光驱提供的刻录速度。使用本项目已测试的 95058 盘片时，可从 <strong>4×</strong> 开始；自己的校准与正式刻录采用相同的速度，便于复现效果。</li>
+<li>点击 <strong>选择…</strong> 设置镜像保存位置，例如 <code>D:\DiscColorStudio\my-design.iso</code>。为单层 DVD 镜像准备约 <strong>5 GB</strong> 可用磁盘空间。</li>
+<li>点击 <strong>烧录光盘</strong>，程序会先生成 ISO，再写入光盘，完成后显示刻录结果。若想先保存镜像，点击旁边的 <strong>生成 ISO</strong>。</li>
+</ol>
+<p><img alt="烧录窗口：选择光驱与速度，设置 ISO 位置，然后烧录光盘" src="guide/06-burn.png" /></p>
+<p>取出光盘，把数据面朝向白光 LED 灯和观察者。固定灯与观察位置，缓慢转动、轻微倾斜盘片，依次找到各张图颜色较好的姿态。项目首页的视频展示了这个寻找观看角度的过程。</p>
+<p><strong>三个文件各有什么用：</strong></p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>来源与用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.discproj</code></td>
+<td>DIS 保存的 DVD 绘图工程；在本程序开始设计时导入其中的几何校准。</td>
+</tr>
+<tr>
+<td><code>.discolor</code></td>
+<td>本程序保存的彩色设计工程；以后打开它继续排版和调色。</td>
+</tr>
+<tr>
+<td><code>.iso</code></td>
+<td>生成好的 DVD 数据镜像；用于写入光盘。</td>
+</tr>
+</tbody>
+</table>
+<p>在 <strong>帮助 → 使用方法</strong> 中查看教程，也可直接打开便携包中的 <strong>使用说明.html</strong>（中文）或 <strong>UserGuide.html</strong>（英文）。</p><footer>Disc Color Studio v0.7.6 · <a href="https://github.com/Neo-626/DiscColorStudio">GitHub</a></footer></main></body></html>

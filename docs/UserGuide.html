@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disc Color Studio · User Guide</title><style>
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#253244;font:16px/1.85 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1160px;margin:32px auto;padding:36px 44px;background:#fff;border-radius:16px}h1{font-size:30px;margin:0 0 18px}h3{font-size:24px;margin:44px 0 16px;padding-top:12px;border-top:1px solid #dde4ed}p{margin:12px 0}li{margin:8px 0}a{color:#1465b8}code,kbd{background:#edf1f6;border-radius:4px;padding:2px 6px;font:inherit;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:24px auto;border:1px solid #dbe2ec;border-radius:6px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:12px;text-align:left;vertical-align:top;border:1px solid #e0e5ed}th{background:#f1f4f8}footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e5ed;font-size:14px;color:#65748a}@media(max-width:650px){main{margin:0;padding:20px 16px;border-radius:0}table{font-size:14px}th,td{padding:8px}h3{font-size:21px}}
+</style></head><body><main><nav><a href="UserGuide.html">English</a> | <a href="使用说明.html">简体中文</a></nav><h1>Disc Color Studio · User Guide</h1>
+<p>Follow these eight steps to make a color disc. Red boxes highlight the controls; click a screenshot to enlarge it.</p>
+<h3>1. Download the application and prepare the discs and drive</h3>
+<ol>
+<li>Open the latest version under <a href="https://github.com/Neo-626/DiscColorStudio/releases">Releases</a>. In <strong>Assets</strong>, download the Windows portable package whose name contains <code>win-x64.zip</code>.</li>
+<li>Extract the entire archive into a folder and run <strong><code>DiscColorStudio.exe</code></strong>. Keep the accompanying <code>data</code>, <code>guide</code>, and other application files in place.</li>
+<li>At startup, select <strong>English</strong> and click <strong>Continue / 继续</strong>. The application remembers your choice; switch languages through <strong>Help → Language…</strong>.</li>
+<li>Prepare a DVD-R writer, discs for calibration, and a <strong>new blank single-layer DVD-R</strong> for your final design. Use the same disc model for calibration and the final burn.</li>
+</ol>
+<p>Have a white LED lamp ready for viewing the finished disc.</p>
+<p><img alt="Startup language choice: English or Simplified Chinese" src="guide/en/00-language.png" /></p>
+<h3>2. Calibrate the disc geometry in DIS and import the saved project</h3>
+<p><strong>Geometry calibration</strong> determines which data position on the disc corresponds to each image position. Complete this step in <a href="https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio">DiscImageStudio (DIS)</a> first.</p>
+<ol>
+<li>Follow the <a href="https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio/blob/3a5cde635c182d6a7e01ff99c2cc1be2ac3ab668/docs/CALIBRATION_TUTORIAL.md">DIS v1.4.0 calibration tutorial (Chinese)</a>: establish the initial geometry, then perform boundary and fine calibration.</li>
+<li>Apply the final calibration parameters to a <strong>DVD drawing project</strong> in DIS and press <strong>Ctrl+S</strong>. This saves a <strong><code>.discproj</code></strong> file, such as <code>MyDVDCalibration.discproj</code>. The default folder is <strong>Documents → DiscImageStudio Projects</strong>.</li>
+<li>Start Disc Color Studio. In the startup dialog below, click <strong>Select DIS calibration project</strong> and choose the file you just saved.</li>
+<li>Review the imported disc parameters, check the confirmation box to confirm that the project contains your final calibration, and click <strong>Apply calibration and start designing</strong>.</li>
+</ol>
+<p><img alt="Startup dialog: import a calibrated DIS .discproj, confirm, and begin designing" src="guide/en/01-calibration.png" /></p>
+<p>The program reads the <strong>inner radius, outer radius, sector count, and three track-pitch coefficients</strong> automatically. The radii define the writable ring, the sector count determines data capacity, and the coefficients describe how the spiral track's position varies across the disc.</p>
+<p>Calibration is saved with your color project. On later launches, choose <strong>Open an existing color project</strong> to continue. When switching disc models, use <strong>DIS calibration</strong> in the main toolbar to import the corresponding project.</p>
+<h3>3. Import and arrange images on the disc</h3>
+<ol>
+<li>Click <strong>Import images</strong> at the top left and select one or more images, or drag image files into the window.</li>
+<li>Click an image on the canvas or in the layer list on the left. A blue border identifies the selected image; the right sidebar edits this image.</li>
+<li>Drag the image to move it, drag its corners to resize it, and drag the round handle above it to rotate it. Place the content you want to keep within the burgundy writable ring.</li>
+<li>Expand <strong>Layout</strong> in the right sidebar to enter physical dimensions. A width of <code>28</code>, for example, means <strong>28 mm</strong> on the disc. Keep <strong>Maintain aspect ratio</strong> checked to preserve the image's proportions.</li>
+</ol>
+<p><img alt="Editor and Layout panel: select layers on the left, arrange on the canvas, and enter dimensions on the right" src="guide/en/05-layout.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>How to use it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Center X / Y</td>
+<td>Coordinates in mm, measured from the disc center. Positive X points right; positive Y points down. Enter values for precise alignment.</td>
+</tr>
+<tr>
+<td>Width / Height / Rotation</td>
+<td>Set physical dimensions and orientation. Hold Shift while dragging the rotation handle to rotate in 15° increments.</td>
+</tr>
+<tr>
+<td>Opacity</td>
+<td>Defaults to 100%. Lower values blend the image with underlying layers or the disc background.</td>
+</tr>
+<tr>
+<td>Move up / down</td>
+<td>Change the stacking order. Layer checkboxes toggle visibility, and Duplicate creates a comparison copy.</td>
+</tr>
+<tr>
+<td>Add text / Rectangle / Ellipse</td>
+<td>Add these from the toolbar, then select them to edit their content, dimensions, and fill color in Layout.</td>
+</tr>
+<tr>
+<td>Whole disc / Design area</td>
+<td>Change the viewing area. Use the mouse wheel to zoom and drag with the middle mouse button to pan.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Continuous color</strong> automatically selects a viewing direction and texture mixture based on image content and position. The canvas predicts each image at its own suitable viewing orientation. Rotate the physical disc to view the images in turn.</p>
+<h3>4. Adjust overall brightness in Light</h3>
+<p>Select an image, expand <strong>Light</strong>, and drag a slider or enter a value to adjust its tones.</p>
+<p><img alt="Light panel: exposure, brightness, contrast, and the sync button" src="guide/en/02-editor-light.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+<th>Starting point and adjustment</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Exposure</td>
+<td>Multiplies the input image signal; 100% retains its original level.</td>
+<td>Default: <strong>100%</strong>. If the whole image is dark, try <strong>110%–130%</strong>, watching detail in faces, white backgrounds, and highlights.</td>
+</tr>
+<tr>
+<td>Brightness</td>
+<td>Adds to or subtracts from brightness values across the image.</td>
+<td>Default: <strong>0</strong>. Try <strong>+5 to +10</strong> for a small lift, or negative values to darken it.</td>
+</tr>
+<tr>
+<td>Contrast</td>
+<td>Changes the difference between light and dark tones.</td>
+<td>Default: <strong>100%</strong>. Try <strong>110%–120%</strong> if the image looks flat, or around <strong>90%</strong> to compare how highlight and shadow detail is retained.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reset light</strong> restores exposure to 100%, brightness to 0, and contrast to 100%.</p>
+<h3>5. Adjust overall and individual colors in Color</h3>
+<p><strong>HSL</strong> stands for <strong>Hue, Saturation, and Lightness</strong>. <strong>All colors</strong> adjusts the entire selected image. The eight color buttons select hue ranges in the input image, making it easier to adjust clothing, hair, and other areas separately.</p>
+<ol>
+<li>Expand <strong>Color</strong> and leave <strong>Enable color adjustments</strong> checked.</li>
+<li>Start with <strong>All colors</strong>, selected by default. Adjust the three sliders to change the whole image.</li>
+<li>To refine a particular color, select <strong>Red, Orange, Yellow, Green, Cyan, Blue, Purple, or Magenta</strong>. For purple clothing, start with Purple; pinkish-purple areas may also respond to Magenta.</li>
+<li>Switch back to <strong>All colors</strong> to continue the overall adjustment. Both sets of settings are retained and combined.</li>
+</ol>
+<p><img alt="Color panel: All colors and eight individual hue ranges" src="guide/en/03-color.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does and how to choose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hue</td>
+<td>Rotates colors. Range: <strong>−180° to +180°</strong> for All colors, <strong>−60° to +60°</strong> for an individual range. Default: <strong>0°</strong>. Start with changes of <strong>5°–10°</strong>.</td>
+</tr>
+<tr>
+<td>Saturation</td>
+<td>Controls vividness, from <strong>−100 to +100</strong>; default <strong>0</strong>. Try <strong>+10 to +20</strong> for muted colors. In All colors, <strong>−100</strong> makes the image grayscale; neutral grays stay neutral as saturation increases.</td>
+</tr>
+<tr>
+<td>Lightness</td>
+<td>Makes colors lighter or darker, from <strong>−100 to +100</strong>; default <strong>0</strong>. Start with increments of <strong>5–10</strong>. All colors also adjusts black, white, and gray areas.</td>
+</tr>
+</tbody>
+</table>
+<p>Individual hue adjustments are applied first, followed by All colors. Uncheck <strong>Enable color adjustments</strong> to compare before and after. <strong>Reset selection</strong> resets the currently selected All colors or hue range; <strong>Reset all colors</strong> resets both the overall adjustment and all eight ranges.</p>
+<h3>6. Choose mixing and sampling settings in Texture and Detail</h3>
+<p>A <strong>texture</strong> is a fine, repeating data pattern written to the DVD. The program selects and mixes textures using the measured color table to form the image's colors and tones.</p>
+<p><img alt="Texture and Detail panel: band smoothing, adaptive mixing, dark enhancement, and sampling" src="guide/en/04-texture.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+<th>How to choose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Band smoothing</td>
+<td>Smooths transitions between texture mixtures at neighboring disc angles, reducing stripe-like color boundaries.</td>
+<td><strong>Start at 100%</strong>. To compare transition strength, duplicate an image and set the copy to 50%.</td>
+</tr>
+<tr>
+<td>Adaptive mixing</td>
+<td>Distributes several related textures across fine regions to approximate intermediate colors and gradients.</td>
+<td><strong>Start at 100%</strong>. Try 50% on a copy to compare a less mixed result, looking at skin tones, gradients, and outlines.</td>
+</tr>
+<tr>
+<td>Dark enhancement · DIS grayscale</td>
+<td>Adds DIS grayscale textures in dark, low-saturation areas to strengthen black clothing, shadows, and dark outlines.</td>
+<td>Off by default. Enable it if dark areas look too bright or too colorful, then check their remaining detail.</td>
+</tr>
+<tr>
+<td>Sampling resolution</td>
+<td>Controls the spatial density at which the source image is sampled during ISO generation.</td>
+<td>Start at <strong>32,768</strong> for general images; increase it step by step for fine lines and small text.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Choosing a sampling resolution:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Software sampling interval</th>
+<th>Suggested use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32,768</td>
+<td>About 3.66 μm per cell</td>
+<td>A starting point for general image work.</td>
+</tr>
+<tr>
+<td>65,536</td>
+<td>About 1.83 μm per cell</td>
+<td>Further comparison for fine hair, small text, and detailed outlines.</td>
+</tr>
+<tr>
+<td>131,072 / 262,144</td>
+<td>About 0.92 / 0.46 μm per cell</td>
+<td>Dense sampling of very fine content in small areas; ISO generation takes longer.</td>
+</tr>
+</tbody>
+</table>
+<p>The grid count divides the 120 mm canvas width into that many sample positions. The <strong>Preview</strong> value at the bottom of the window is used for interactive display; <strong>Export</strong> is used to generate the ISO.</p>
+<h3>7. Compare settings, sync adjustments, and save the project</h3>
+<ol>
+<li>To compare settings on one disc, select an image, click <strong>Duplicate</strong> on the left (or press <strong>Ctrl+D</strong>), move the copy elsewhere, and adjust it independently.</li>
+<li>Once you have a set of adjustments you like, click <strong>Sync to all images</strong> at the top of the right sidebar. The selected image's Light, overall and eight-range HSL, texture, and sampling settings are applied to all images and become the defaults for later imports. Each image retains its position, size, rotation, and opacity.</li>
+<li>Click <strong>Save project</strong> (or press <strong>Ctrl+S</strong>) to save a <strong><code>.discolor</code></strong> file. It includes image assets, layer layout, adjustments, and the imported DIS geometry calibration.</li>
+</ol>
+<p>Use <strong>Ctrl+Z / Ctrl+Y</strong> for <strong>Undo / Redo</strong>. A sync operation can also be undone as a single step.</p>
+<h3>8. Generate and burn the ISO, then view the disc</h3>
+<ol>
+<li>Insert a new blank single-layer DVD-R and click <strong>Burn disc</strong> in the toolbar.</li>
+<li>Select the writer in the drive list. After inserting a disc, use <strong>Refresh drives</strong> to update the media information.</li>
+<li>Choose one of the speeds offered by the drive. For the tested Verbatim 95058 media, <strong>4×</strong> is a useful starting point. Use the same speed for your calibration and final burns to help reproduce the result.</li>
+<li>Click <strong>Choose</strong> to set the ISO path, for example <code>D:\DiscColorStudio\my-design.iso</code>. Allow about <strong>5 GB</strong> of free disk space for a single-layer DVD image.</li>
+<li>Click <strong>Burn disc</strong>. The program generates the ISO, writes it to the disc, and displays the result. To save the image first, click <strong>Generate ISO</strong> instead.</li>
+</ol>
+<p><img alt="Burn dialog: choose a drive and speed, set the ISO path, then burn the disc" src="guide/en/06-burn.png" /></p>
+<p>Remove the finished disc and face its data side toward a white LED lamp and the observer. Keep the lamp and your viewing position fixed, then slowly rotate and slightly tilt the disc to find a favorable orientation for each image. The video above demonstrates this process.</p>
+<p><strong>What the three file types are for:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Source and purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.discproj</code></td>
+<td>A DVD drawing project saved by DIS. Import its geometry calibration when starting a design here.</td>
+</tr>
+<tr>
+<td><code>.discolor</code></td>
+<td>A color design project saved by this application. Reopen it to continue arranging and adjusting images.</td>
+</tr>
+<tr>
+<td><code>.iso</code></td>
+<td>The generated DVD data image, ready to be written to a disc.</td>
+</tr>
+</tbody>
+</table>
+<p>Open <strong>Help → User guide</strong>, or open <strong>UserGuide.html</strong> (English) or <strong>使用说明.html</strong> (Chinese) from the portable package.</p><footer>Disc Color Studio v0.7.6 · <a href="https://github.com/Neo-626/DiscColorStudio">GitHub</a></footer></main></body></html>
