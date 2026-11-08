@@ -31,7 +31,7 @@
 
 实盘局部仅裁剪、旋转方向和缩放，未调整颜色、曝光或锐度，并确认视觉效果和图片一致。四组照片呈现了不同色域下的色彩表现。
 
-https://github.com/user-attachments/assets/7f16edb0-25e5-4b6b-8edc-32f056d26dec
+https://github.com/user-attachments/assets/d722f402-3078-4b46-9a33-03698969b643
 
 **角度演示。** [备用 MP4 文件](docs/media/viewing-angle.mp4) · [下载视频](https://github.com/Neo-626/DiscColorStudio/raw/refs/heads/main/docs/media/viewing-angle.mp4)
 
@@ -78,7 +78,7 @@ I_t(\lambda)=H_t(\lambda;\theta_i,\theta_o,\phi)
 
 $`\mathbf{C}_j(\phi)`$ 是该角度下第 $`j`$ 种纹理的实测线性 RGB，$`w_j`$ 是分配给它的比例。调节这些比例可以补充单一纹理之间的中间色与明暗层次；让相邻角度的配方连续过渡，可以减轻纹理切换形成的条带。深色和轮廓可结合 DIS 灰阶纹理处理。各纹理的实测颜色及其可实现的混色共同构成该角度的可用色域，软件在这个范围内逼近图片的目标颜色。
 
-![纹理搜索盘实拍局部，仅供演示](https://github.com/user-attachments/assets/b3ff7f11-5cff-44f4-9432-139fd0a04666)
+![纹理搜索盘实拍局部，仅供演示](https://github.com/user-attachments/assets/fa69e45d-b966-4ea9-b2d1-134ca5c056e3)
 
 > **搜索盘实拍，仅供演示。** 图中的密集色块用于搜索纹理和颜色。此搜索盘的生成工具、工程、ISO 及原始校准照片集**不包含在仓库或发行包中**。软件运行所需的处理后数值色表仍随程序提供。
 

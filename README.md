@@ -31,7 +31,7 @@ Four illustrations, shown alongside close-ups of their burned results.
 
 The disc close-ups have only been cropped, rotated, and resized. Color, exposure, and sharpness were left unchanged, and the photographs were checked against the appearance in person. The four examples show how different color ranges reproduce on the disc.
 
-https://github.com/user-attachments/assets/7f16edb0-25e5-4b6b-8edc-32f056d26dec
+https://github.com/user-attachments/assets/d722f402-3078-4b46-9a33-03698969b643
 
 **Viewing-angle demonstration.** [Alternative MP4 file](docs/media/viewing-angle.mp4) Â· [Download video](https://github.com/Neo-626/DiscColorStudio/raw/refs/heads/main/docs/media/viewing-angle.mp4)
 
@@ -77,7 +77,7 @@ In practice, we build an **empirical, angle-dependent color table** recording â€
 
 $`\mathbf{C}_j(\phi)`$ is the measured linear RGB of texture $`j`$ at that angle, and $`w_j`$ is its assigned proportion. Adjusting these proportions fills in intermediate colors and tonal levels between individual textures. Smooth transitions between neighboring angles' mixtures reduce bands caused by texture changes. Dark areas and outlines can also use DIS grayscale textures. The measured texture colors and their achievable mixtures form the available color gamut at each angle; the software approximates the image within that gamut.
 
-![Close-up of a texture-search disc, shown for demonstration](https://github.com/user-attachments/assets/b3ff7f11-5cff-44f4-9432-139fd0a04666)
+![Close-up of a texture-search disc, shown for demonstration](https://github.com/user-attachments/assets/fa69e45d-b966-4ea9-b2d1-134ca5c056e3)
 
 > **Texture-search disc, shown for demonstration.** The dense patches were used to explore textures and colors. The generator, project, ISO, and original calibration photograph collection for this search disc **are not included in the repository or release packages**. The processed numerical color tables required by the application are included.
 
