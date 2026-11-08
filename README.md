@@ -4,6 +4,8 @@
 
 A Windows tool for burning color images onto the **data side of ordinary DVD-R discs**. Built on the DVD encoding and burning components of [DiscImageStudio (DIS)](https://github.com/JiaFeiMiao-K-Cat/DiscImageStudio), it adds measured angle-dependent color tables, color mapping, texture mixing, and a layer editor.
 
+**Supported media: new, blank single-layer DVD-R (4.7 GB) only.**
+
 ## Disc demos
 
 Four illustrations, shown alongside close-ups of their burned results.
@@ -187,7 +189,7 @@ A **texture** is a fine, repeating data pattern written to the DVD. The program 
 | Band smoothing | Smooths transitions between texture mixtures at neighboring disc angles, reducing stripe-like color boundaries. | **Start at 100%**. To compare transition strength, duplicate an image and set the copy to 50%. |
 | Adaptive mixing | Distributes several related textures across fine regions to approximate intermediate colors and gradients. | **Start at 100%**. Try 50% on a copy to compare a less mixed result, looking at skin tones, gradients, and outlines. |
 | Dark enhancement · DIS grayscale | Adds DIS grayscale textures in dark, low-saturation areas to strengthen black clothing, shadows, and dark outlines. | Off by default. Enable it if dark areas look too bright or too colorful, then check their remaining detail. |
-| Sampling resolution | Controls the spatial density at which the source image is sampled during ISO generation. | Start at **32,768** for general images; increase it step by step for fine lines and small text. |
+| Sampling resolution | Controls the spatial density at which the source image is sampled during ISO generation. | Start at **32,768** for general images; compare **65,536** for fine lines and small text. |
 
 **Choosing a sampling resolution:**
 
@@ -195,9 +197,11 @@ A **texture** is a fine, repeating data pattern written to the DVD. The program 
 | --- | --- | --- |
 | 32,768 | About 3.66 μm per cell | A starting point for general image work. |
 | 65,536 | About 1.83 μm per cell | Further comparison for fine hair, small text, and detailed outlines. |
-| 131,072 / 262,144 | About 0.92 / 0.46 μm per cell | Dense sampling of very fine content in small areas; ISO generation takes longer. |
+| 131,072 / 262,144 | About 0.92 / 0.46 μm per cell | High-density sampling experiments; additional visible detail has not been measured, and ISO generation takes longer. |
 
 The grid count divides the 120 mm canvas width into that many sample positions. The **Preview** value at the bottom of the window is used for interactive display; **Export** is used to generate the ISO.
+
+The current encoder samples the source image at the centers of controllable data bytes, normally spaced about **2.13 μm along the track** (16 × 0.1333 μm); synchronization and error-correction regions create larger gaps between some sample positions. Adjacent tracks have a nominal spacing of about **0.74 μm**. A finer software grid can reduce edge-position and sampling errors; its benefit depends on the image, texture, and geometry calibration. **0.46 μm is the software sampling interval. The effective resolution of the image on the disc has yet to be measured.** [Encoder implementation](https://github.com/Neo-626/DiscColorStudio/blob/main/third_party/DiscImageStudio/DvdImageSolver/Solver/FastDispersionImageWriter.cs) · [DVD-R specification, §§10.8–10.9 and 20](https://ecma-international.org/wp-content/uploads/ECMA-359_1st_edition_december_2004.pdf)
 
 ### 7. Compare settings, sync adjustments, and save the project
 

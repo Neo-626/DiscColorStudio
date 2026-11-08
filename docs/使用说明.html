@@ -2,6 +2,7 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disc Color Studio · 使用说明</title><style>
 :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#253244;font:16px/1.85 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1160px;margin:32px auto;padding:36px 44px;background:#fff;border-radius:16px}h1{font-size:30px;margin:0 0 18px}h3{font-size:24px;margin:44px 0 16px;padding-top:12px;border-top:1px solid #dde4ed}p{margin:12px 0}li{margin:8px 0}a{color:#1465b8}code,kbd{background:#edf1f6;border-radius:4px;padding:2px 6px;font:inherit;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:24px auto;border:1px solid #dbe2ec;border-radius:6px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:12px;text-align:left;vertical-align:top;border:1px solid #e0e5ed}th{background:#f1f4f8}footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e5ed;font-size:14px;color:#65748a}@media(max-width:650px){main{margin:0;padding:20px 16px;border-radius:0}table{font-size:14px}th,td{padding:8px}h3{font-size:21px}}
 </style></head><body><main><nav><a href="UserGuide.html">English</a> | <a href="使用说明.html">简体中文</a></nav><h1>Disc Color Studio · 使用说明</h1>
+<p><strong>软件仅支持新的空白单层 DVD-R（4.7 GB）。</strong></p>
 <p>按以下八步制作彩色光盘。截图中的红框标出对应控件，点击图片可放大。</p>
 <h3>1. 下载程序，准备盘片与光驱</h3>
 <ol>
@@ -158,7 +159,7 @@
 <tr>
 <td>采样精度</td>
 <td>控制生成镜像时，软件读取原图的空间密度。</td>
-<td>一般图片从 <strong>32,768 格</strong> 开始；细线、小字较多时，逐档提高。</td>
+<td>一般图片从 <strong>32,768 格</strong> 开始；细线、小字较多时，可用 <strong>65,536 格</strong> 对照。</td>
 </tr>
 </tbody>
 </table>
@@ -185,11 +186,12 @@
 <tr>
 <td>131,072 / 262,144</td>
 <td>约 0.92 / 0.46 μm / 格</td>
-<td>小面积极细内容的高密度取样，生成镜像耗时更长。</td>
+<td>高密度取样实验；额外清晰度收益尚未实测，生成镜像耗时更长。</td>
 </tr>
 </tbody>
 </table>
 <p>“格”表示把 120 mm 宽的画布划分为对应数量的采样位置。窗口底部的 <strong>预览</strong> 数值用于交互显示，<strong>导出</strong> 数值用于生成镜像。</p>
+<p>当前编码器通常沿轨道每约 <strong>2.13 μm</strong> 对一个可控数据字节取样（16 × 0.1333 μm）；同步码和纠错码区域会使部分取样间隔更大。相邻轨道的标称间距约 <strong>0.74 μm</strong>。更细的软件网格可减小边缘定位和取样误差，实际收益取决于图像、纹理和几何校准。<strong>0.46 μm 是软件采样间距；实盘图像的有效分辨率尚未测定。</strong> <a href="https://github.com/Neo-626/DiscColorStudio/blob/main/third_party/DiscImageStudio/DvdImageSolver/Solver/FastDispersionImageWriter.cs">编码实现</a> · <a href="https://ecma-international.org/wp-content/uploads/ECMA-359_1st_edition_december_2004.pdf">DVD-R 规范，第 10.8、10.9、20 节</a></p>
 <h3>7. 做对照、同步设置，保存彩色工程</h3>
 <ol>
 <li>想在一张盘上比较效果：选中图片，点击左侧 <strong>复制</strong>（或 <strong>Ctrl+D</strong>），把副本移到另一处，再单独调整副本。</li>

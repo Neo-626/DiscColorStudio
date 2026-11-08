@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disc Color Studio · User Guide</title><style>
 :root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#eef2f6;color:#253244;font:16px/1.85 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1160px;margin:32px auto;padding:36px 44px;background:#fff;border-radius:16px}h1{font-size:30px;margin:0 0 18px}h3{font-size:24px;margin:44px 0 16px;padding-top:12px;border-top:1px solid #dde4ed}p{margin:12px 0}li{margin:8px 0}a{color:#1465b8}code,kbd{background:#edf1f6;border-radius:4px;padding:2px 6px;font:inherit;overflow-wrap:anywhere}img{display:block;max-width:100%;height:auto;margin:24px auto;border:1px solid #dbe2ec;border-radius:6px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{padding:12px;text-align:left;vertical-align:top;border:1px solid #e0e5ed}th{background:#f1f4f8}footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e5ed;font-size:14px;color:#65748a}@media(max-width:650px){main{margin:0;padding:20px 16px;border-radius:0}table{font-size:14px}th,td{padding:8px}h3{font-size:21px}}
 </style></head><body><main><nav><a href="UserGuide.html">English</a> | <a href="使用说明.html">简体中文</a></nav><h1>Disc Color Studio · User Guide</h1>
+<p><strong>Supported media: new, blank single-layer DVD-R (4.7 GB) only.</strong></p>
 <p>Follow these eight steps to make a color disc. Red boxes highlight the controls; click a screenshot to enlarge it.</p>
 <h3>1. Download the application and prepare the discs and drive</h3>
 <ol>
@@ -158,7 +159,7 @@
 <tr>
 <td>Sampling resolution</td>
 <td>Controls the spatial density at which the source image is sampled during ISO generation.</td>
-<td>Start at <strong>32,768</strong> for general images; increase it step by step for fine lines and small text.</td>
+<td>Start at <strong>32,768</strong> for general images; compare <strong>65,536</strong> for fine lines and small text.</td>
 </tr>
 </tbody>
 </table>
@@ -185,11 +186,12 @@
 <tr>
 <td>131,072 / 262,144</td>
 <td>About 0.92 / 0.46 μm per cell</td>
-<td>Dense sampling of very fine content in small areas; ISO generation takes longer.</td>
+<td>High-density sampling experiments; additional visible detail has not been measured, and ISO generation takes longer.</td>
 </tr>
 </tbody>
 </table>
 <p>The grid count divides the 120 mm canvas width into that many sample positions. The <strong>Preview</strong> value at the bottom of the window is used for interactive display; <strong>Export</strong> is used to generate the ISO.</p>
+<p>The current encoder samples the source image at the centers of controllable data bytes, normally spaced about <strong>2.13 μm along the track</strong> (16 × 0.1333 μm); synchronization and error-correction regions create larger gaps between some sample positions. Adjacent tracks have a nominal spacing of about <strong>0.74 μm</strong>. A finer software grid can reduce edge-position and sampling errors; its benefit depends on the image, texture, and geometry calibration. <strong>0.46 μm is the software sampling interval. The effective resolution of the image on the disc has yet to be measured.</strong> <a href="https://github.com/Neo-626/DiscColorStudio/blob/main/third_party/DiscImageStudio/DvdImageSolver/Solver/FastDispersionImageWriter.cs">Encoder implementation</a> · <a href="https://ecma-international.org/wp-content/uploads/ECMA-359_1st_edition_december_2004.pdf">DVD-R specification, §§10.8–10.9 and 20</a></p>
 <h3>7. Compare settings, sync adjustments, and save the project</h3>
 <ol>
 <li>To compare settings on one disc, select an image, click <strong>Duplicate</strong> on the left (or press <strong>Ctrl+D</strong>), move the copy elsewhere, and adjust it independently.</li>
