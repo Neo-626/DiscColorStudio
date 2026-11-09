@@ -134,8 +134,8 @@ public sealed class Design
         && (ImageMode(l) != QuantizationMode || ImageRasterSize(l) != RasterSize || l.AllowedIds is not null || l.ColorModelVersion.HasValue || l.OutputCompensation is not null));
     [JsonIgnore] public bool HasAdaptiveLayers => RasterGrid.UsesAdaptiveMapping(QuantizationMode)
         || Layers.Any(l => l.Visible && l.Opacity > 0 && l.Kind == "image" && RasterGrid.UsesAdaptiveMapping(l.QuantizationMode));
-    [JsonIgnore] public int ExportRasterSize => Layers.Where(l => l.Visible && l.Opacity > 0 && l.Kind == "image")
-        .Select(ImageRasterSize).Append(RasterSize).Max();
+    [JsonIgnore] public int ExportRasterSize => Layers.Where(l => l.Visible && l.Opacity > 0)
+        .Select(ImageRasterSize).DefaultIfEmpty(RasterSize).Max();
 
     public string ImageMode(Layer layer) => layer.Kind == "image" ? layer.QuantizationMode ?? QuantizationMode : QuantizationMode;
     public IReadOnlyList<int> ImageColors(Layer layer) => layer.AllowedIds ?? AllowedIds;

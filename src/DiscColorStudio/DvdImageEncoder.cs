@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using DvdImageSolver.Solver;
@@ -53,11 +54,16 @@ public static class DvdImageEncoder
         private readonly Design design;private readonly int size;private readonly Renderer renderer=new();private readonly AngleColorEngine engine=new();
         private readonly AngleLayerPlan[] plans;private readonly ContinuousColorMap? map;private readonly Layer[] settings;
         private readonly Dictionary<int,byte[]> motifs;private readonly RecipeRaster? grayRaster;private readonly ThreadLocal<Worker> workers;
-        private readonly Dictionary<(int,int),Pixels> tiles=[];private readonly Queue<(int,int)> order=[];private readonly object gate=new();
-        private Pixels? full;private const int TileSize=256,CacheTiles=256;
+        private readonly ConcurrentDictionary<(int,int),Lazy<Pixels>> tiles=new();
+        private readonly Queue<(int,int)> order=[];private readonly object gate=new(),renderGate=new();
+        private readonly int cacheTiles;
+        private Pixels? full;private const int TileSize=256;
         public Sampler(Design source,CancellationToken cancellation)
         {
             design=source.Clone();size=design.ExportRasterSize;renderer.Cancellation=cancellation;
+            // A circle crosses at most 8*r/tile grid boundaries. Retain a full outer turn
+            // plus the neighbouring tiles visited by the parallel encoder batches.
+            cacheTiles=Math.Max(256,checked((int)Math.Ceiling(8*design.Geometry.OuterRadiusMm*size/120/TileSize))+128);
             plans=design.HasAngleColor?engine.Plans(design,renderer):[];map=design.HasAngleColor?AngleColorEngine.MapFor(design):null;
             settings=plans.Select(p=>design.Layers.Single(l=>l.Id==p.LayerId)).ToArray();motifs=design.Palette.ToDictionary(s=>s.Id,s=>Convert.FromHexString(s.Motif));
             grayRaster=design.HasGrayLayers?new RecipeRaster(design,size):null;
@@ -100,16 +106,21 @@ public static class DvdImageEncoder
         private Pixels Tile(int x,int y,Worker worker)
         {
             if(full is not null)return full;var key=(x/TileSize,y/TileSize);if(worker.Key==key)return worker.Tile!;
-            lock(gate)
+            if(!tiles.TryGetValue(key,out var found))
             {
-                if(!tiles.TryGetValue(key,out var found))
+                lock(gate)
                 {
-                    while(tiles.Count>=CacheTiles)tiles.Remove(order.Dequeue());
-                    found=Build(new(key.Item1*TileSize,key.Item2*TileSize,Math.Min(TileSize,size-key.Item1*TileSize),Math.Min(TileSize,size-key.Item2*TileSize)));
-                    tiles.Add(key,found);order.Enqueue(key);
+                    if(!tiles.TryGetValue(key,out found))
+                    {
+                        while(tiles.Count>=cacheTiles)tiles.TryRemove(order.Dequeue(),out _);
+                        var rect=new Rectangle(key.Item1*TileSize,key.Item2*TileSize,Math.Min(TileSize,size-key.Item1*TileSize),Math.Min(TileSize,size-key.Item2*TileSize));
+                        // GDI renderers are shared; serialize new renders without blocking cache hits.
+                        found=new Lazy<Pixels>(()=>{lock(renderGate)return Build(rect);});
+                        tiles[key]=found;order.Enqueue(key);
+                    }
                 }
-                worker.Key=key;return worker.Tile=found;
             }
+            var pixels=found.Value;worker.Key=key;return worker.Tile=pixels;
         }
         public byte Sample(DvdCodewordSample sample)
         {
