@@ -7,6 +7,9 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            // Resume an already-generated image using the language chosen in the editor.
+            if(args.Length==2&&args[0]=="--burn-iso")
+            {Ui.SetLanguage(Ui.LoadPreference());using var burn=BurnForm.ForExistingIso(args[1]);Application.Run(burn);return 0;}
             using(var language=new LanguageForm(Ui.LoadPreference()))
             {
                 if(language.ShowDialog()!=DialogResult.OK)return 0;

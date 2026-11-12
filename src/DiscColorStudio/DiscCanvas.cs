@@ -11,7 +11,28 @@ public sealed class DiscCanvas : Control
     public string? SelectedId { get; set; }
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public int ViewMode { get; set; }
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public LadderView Simulation { get; set; } = new();
     public event Action<string?>? SelectionChanged;
+    public bool DrawingObservation { get; private set; }
+    public event Action? ObservationEdited;
+    private string? directionLayerId;
+    private PointF directionEnd;
+    public void BeginObservationArrow()
+    {
+        if(!Document.UsesLadder || Selected is null)return;
+        CancelObservationArrow();DrawingObservation=true;directionLayerId=SelectedId;Cursor=Cursors.Cross;Focus();Invalidate();
+    }
+    public void CancelObservationArrow()
+    {
+        if(operation=="direction")operation="";
+        DrawingObservation=false;directionLayerId=null;Capture=false;Cursor=Cursors.Default;Invalidate();
+    }
+    private PointF ArrowEnd(Layer layer)
+    {
+        double a=LadderViewing.ArrowAngle(layer)*Math.PI/180,length=Math.Clamp(Math.Min(layer.Width,layer.Height)*.45,8,22);
+        return new((float)(layer.X+Math.Cos(a)*length),(float)(layer.Y+Math.Sin(a)*length));
+    }
     public event Action? BeginEdit;
     public event Action? LayerEdited;
     public event Action? ViewportChanged;
@@ -28,7 +49,7 @@ public sealed class DiscCanvas : Control
     private RectangleF previewWorld = new(-60, -60, 120, 120);
     private readonly Renderer renderer = new(true);
     private CancellationTokenSource? activePreview;
-    private sealed record PreviewRequest(Design Source,Design Design,int Size,Rectangle Region,int Mode,long Revision,bool Interactive);
+    private sealed record PreviewRequest(Design Source,Design Design,int Size,Rectangle Region,int Mode,long Revision,bool Interactive,LadderView Simulation);
     private PreviewRequest? pendingPreview;
     private PreviewRequest? refinement;
     private long revision;
@@ -89,7 +110,7 @@ public sealed class DiscCanvas : Control
         }
         if(!activeInteractive)activePreview?.Cancel();
         int quick=InteractiveGrid(size,Unit);
-        var request=new PreviewRequest(Document,Document.Clone(),size,Region(size),ViewMode,++revision,false);
+        var request=new PreviewRequest(Document,Document.Clone(),size,Region(size),ViewMode,++revision,false,Simulation);
         bool progressive=ProgressivePreview;
         pendingPreview = progressive ? request with {Size=quick,Region=Region(quick),Interactive=true} : request;
         refine.Stop();refinement=progressive?request:null;
@@ -130,8 +151,8 @@ public sealed class DiscCanvas : Control
                 renderer.InteractivePreview=request.Interactive;
                 try
                 {
-                    next = await Task.Run(() => RenderPreview(request.Design, renderer, request.Size, request.Region, request.Mode));
-                    if (closing || !ReferenceEquals(Document,request.Source) || request.Mode!=ViewMode
+                    next = await Task.Run(() => RenderPreview(request.Design, renderer, request.Size, request.Region, request.Mode,request.Simulation));
+                    if (closing || !ReferenceEquals(Document,request.Source) || (request.Mode!=ViewMode || request.Simulation!=Simulation)
                         || request.Revision<lastShownRevision || (!request.Interactive && request.Revision != revision))
                     { next?.Dispose(); continue; }
                     double unit = request.Size / 120.0;
@@ -139,10 +160,10 @@ public sealed class DiscCanvas : Control
                     SetPreview(next, request.Size, new RectangleF((float)(request.Region.X / unit - 60), (float)(request.Region.Y / unit - 60),
                         (float)(request.Region.Width / unit), (float)(request.Region.Height / unit)));
                     if(request.Design.HasAngleColor)AnglePlansReady?.Invoke(renderer.AngleColors.LastPlans);
-                    string engineStatus=Ui.Text("连续彩色");
+                    string engineStatus=Ui.Text(request.Design.UsesLadder?"周期梯保色":"连续彩色");
                     RenderStatus?.Invoke(request.Interactive
                         ? Ui.Format("正在更新预览 · {0}",engineStatus)
-                        : Ui.Format("精细预览 · {0} · 导出 {1:N0} 格",engineStatus,request.Design.ExportRasterSize));
+                        : request.Design.UsesLadder?Ui.Format("周期梯模拟 · 导出 {0:N0} 格",request.Design.ExportRasterSize):Ui.Format("精细预览 · {0} · 导出 {1:N0} 格",engineStatus,request.Design.ExportRasterSize));
                 }
                 catch (OperationCanceledException) { next?.Dispose(); }
                 catch (Exception ex) { next?.Dispose(); if (!closing) RenderStatus?.Invoke(Ui.Text("预览未完成：") + ex.Message); }
@@ -151,9 +172,10 @@ public sealed class DiscCanvas : Control
         }
         finally { rendering = false; if (closing) renderer.Dispose(); }
     }
-    internal static Bitmap? RenderPreview(Design design, Renderer renderer, int size, Rectangle region, int mode)
+    internal static Bitmap? RenderPreview(Design design, Renderer renderer, int size, Rectangle region, int mode,LadderView? simulation=null)
     {
         if (region.Width <= 0 || region.Height <= 0) return null;
+        if(design.UsesLadder && mode!=2)return LadderEngine.Render(design,renderer,size,region,simulation);
         if(design.HasAngleColor){if(mode!=2)return renderer.AngleColors.Render(design,renderer,size,region,mode);renderer.AngleColors.Plans(design,renderer);}
         var detail = new TiledExport(design, size);
         if (design.HasGrayLayers || mode==4) return LayerPreview.Preview(design, renderer, size, region, mode);
@@ -221,6 +243,16 @@ public sealed class DiscCanvas : Control
             g.FillEllipse(Brushes.White, -handle / 2, -h / 2 - 24 / unit, handle, handle);
             g.DrawEllipse(outline, -handle / 2, -h / 2 - 24 / unit, handle, handle);
             g.Restore(s);
+            if(Document.UsesLadder && (selected.LadderViewing is not null || selected.LadderPlacement is not null || selected.LadderObservation is not null || operation=="direction"))
+            {
+                bool draft=operation=="direction" && directionLayerId==selected.Id;
+                PointF from=draft?downWorld:new((float)selected.X,(float)selected.Y),to=draft?directionEnd:ArrowEnd(selected);
+                using var border=new Pen(Color.FromArgb(210,255,255,255),5/unit);
+                using var arrow=new Pen(Color.FromArgb(0,155,170),2.6f/unit){EndCap=LineCap.ArrowAnchor};
+                g.DrawLine(border,from,to);g.DrawLine(arrow,from,to);
+                g.FillEllipse(Brushes.White,from.X-3/unit,from.Y-3/unit,6/unit,6/unit);
+                g.DrawEllipse(arrow,to.X-4/unit,to.Y-4/unit,8/unit,8/unit);
+            }
         }
         g.ResetTransform();
         using var font = new Font("Microsoft YaHei UI", 9);
@@ -241,6 +273,20 @@ public sealed class DiscCanvas : Control
         base.OnMouseDown(e); Focus(); downScreen = e.Location; downWorld = ToWorld(e.Location);
         if (e.Button is MouseButtons.Middle or MouseButtons.Right) { operation = "pan"; Capture = true; return; }
         if (e.Button != MouseButtons.Left) return;
+        if(Document.UsesLadder && Selected is {} directionLayer)
+        {
+            bool handle=false;
+            if(directionLayer.LadderViewing is not null || directionLayer.LadderPlacement is not null || directionLayer.LadderObservation is not null)
+            {var end=ToScreen(ArrowEnd(directionLayer));handle=Math.Pow(end.X-e.X,2)+Math.Pow(end.Y-e.Y,2)<144;}
+            if(DrawingObservation && directionLayerId==SelectedId || handle)
+            {
+                var p=Local(directionLayer,downWorld);
+                if(!handle && (Math.Abs(p.X)>directionLayer.Width/2 || Math.Abs(p.Y)>directionLayer.Height/2))return;
+                directionLayerId=SelectedId;DrawingObservation=true;
+                if(handle)downWorld=new((float)directionLayer.X,(float)directionLayer.Y);
+                directionEnd=ToWorld(e.Location);operation="direction";Capture=true;Invalidate();return;
+            }
+        }
         if (Selected is { } layer)
         {
             PointF p = Local(layer, downWorld); double tolerance = 11 / Unit;
@@ -260,6 +306,7 @@ public sealed class DiscCanvas : Control
     {
         base.OnMouseMove(e); var world = ToWorld(e.Location); CursorPositionChanged?.Invoke($"X {world.X:0.00}   Y {world.Y:0.00} mm");
         if (operation == "pan") { pan.X += e.X - downScreen.X; pan.Y += e.Y - downScreen.Y; downScreen = e.Location; NotifyViewport(); Invalidate(); return; }
+        if(operation=="direction"){directionEnd=world;Invalidate();return;}
         if (start is null || Selected is not { } l || operation.Length == 0) return;
         if (operation == "move") { l.X = Math.Clamp(start.X + world.X - downWorld.X, -150, 150); l.Y = Math.Clamp(start.Y + world.Y - downWorld.Y, -150, 150); }
         if (operation == "rotate")
@@ -284,7 +331,24 @@ public sealed class DiscCanvas : Control
         LayerEdited?.Invoke(); Invalidate();
     }
     protected override void OnMouseUp(MouseEventArgs e)
-    { base.OnMouseUp(e); operation = ""; start = null; Capture = false; }
+    {
+        base.OnMouseUp(e);
+        if(operation=="direction")
+        {
+            var end=ToWorld(e.Location);double dx=end.X-downWorld.X,dy=end.Y-downWorld.Y;
+            if(e.Button==MouseButtons.Left && Selected is {} layer && layer.Id==directionLayerId && Math.Sqrt(dx*dx+dy*dy)*Unit>=8)
+            {
+                BeginEdit?.Invoke();double a=Math.Atan2(dy,dx)*180/Math.PI;
+                if((ModifierKeys&Keys.Shift)!=0)a=Math.Round(a/15)*15;
+                LadderViewing.SetArrow(layer,a);
+                LayerEdited?.Invoke();ObservationEdited?.Invoke();
+            }
+            CancelObservationArrow();
+        }
+        operation="";start=null;Capture=false;
+    }
+    protected override void OnMouseCaptureChanged(EventArgs e)
+    {base.OnMouseCaptureChanged(e);if(!Capture && operation=="direction")CancelObservationArrow();}
     protected override void OnMouseDoubleClick(MouseEventArgs e)
     { base.OnMouseDoubleClick(e); if (Selected is not null) FocusDesign(); }
     protected override void OnMouseWheel(MouseEventArgs e)

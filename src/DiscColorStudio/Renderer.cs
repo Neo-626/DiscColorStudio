@@ -13,6 +13,16 @@ public sealed class Renderer : IDisposable
     public Renderer() : this(false) { }
     internal Renderer(bool useGpu) { UseGpu=useGpu; }
     private readonly Dictionary<string, Bitmap> comparisonPreviews = [];
+    private readonly Dictionary<string,LadderField> ladderFields=[];
+    private long ladderBytes;
+    internal LadderField LadderField(string key,Func<LadderField> build)
+    {
+        if(ladderFields.TryGetValue(key,out var field))return field;
+        field=build();long bytes=field.Bands.LongLength*17;
+        while(ladderFields.Count>0 && ladderBytes+bytes>128L*1024*1024)
+        {var old=ladderFields.First();ladderBytes-=old.Value.Bands.LongLength*17;ladderFields.Remove(old.Key);}
+        ladderFields[key]=field;ladderBytes+=bytes;return field;
+    }
     private long comparisonBytes;
     internal int ComparisonPatchCount { get; private set; }
     internal bool TryLayerPreview(string key, out Bitmap bitmap) => comparisonPreviews.TryGetValue(key, out bitmap!);
@@ -457,5 +467,5 @@ public sealed class Renderer : IDisposable
         }
         return (owners, profiles.ToArray());
     }
-    public void Dispose() { AngleColors.Dispose();foreach (var b in images.Values) b.Dispose(); foreach(var b in adjustedImages.Values)b.Dispose();adjustedImages.Clear();foreach(var b in previewSources.Values)b.Dispose();previewSources.Clear();foreach (var b in comparisonPreviews.Values) b.Dispose(); comparisonPreviews.Clear(); images.Clear(); alphaCache.Clear(); profileCache.Clear(); adaptiveCache.Clear(); }
+    public void Dispose() { ladderFields.Clear();ladderBytes=0;AngleColors.Dispose();foreach (var b in images.Values) b.Dispose(); foreach(var b in adjustedImages.Values)b.Dispose();adjustedImages.Clear();foreach(var b in previewSources.Values)b.Dispose();previewSources.Clear();foreach (var b in comparisonPreviews.Values) b.Dispose(); comparisonPreviews.Clear(); images.Clear(); alphaCache.Clear(); profileCache.Clear(); adaptiveCache.Clear(); }
 }

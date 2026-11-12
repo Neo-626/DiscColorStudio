@@ -20,6 +20,21 @@ public sealed class MainForm : ResponsiveForm
     private readonly Button[] bands=new Button[8];
     private readonly Button allColors=new(){Text=Ui.Text("全部颜色"),AutoSize=true,MinimumSize=new Size(0,32),Padding=new Padding(4,3,4,3),FlatStyle=FlatStyle.Flat,BackColor=Color.FromArgb(231,235,241),Margin=new Padding(0,0,0,6)};
     private readonly WrappingCheckBox enableColors=new(){Text=Ui.Text("启用颜色调整"),AutoSize=true},preferDark=new(){Text=Ui.Text("暗部增强 · DIS 灰阶纹理"),AutoSize=true};
+    private readonly ComboBox colourMethod=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=190};
+    private readonly Label simulationCaption=new(){AutoSize=true,Text=Ui.Text("模拟预览"),Margin=new Padding(0,6,8,0),ForeColor=Color.SlateGray};
+    private Label precisionCaption=null!;
+    private readonly ComboBox previewMode=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=210};
+    private readonly ComboBox observation=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=210};
+    private readonly NumericUpDown viewRotation=Numeric(-180,180,1),viewTiltX=Numeric(-10,10,1),viewTiltY=Numeric(-10,10,1);
+    private readonly WrappingFlowPanel viewing=new(){Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,WrapContents=true,Padding=new Padding(10,2,8,4),BackColor=Color.White};
+    private bool viewingLoading;
+    private LadderReference? sharedReference;
+    private readonly NumericUpDown headShift=Numeric(-150,150,1);
+    private readonly InspectorSection directionSection=new(Ui.Text("观看设置"),true);
+    private readonly NumericUpDown directionAzimuth=Numeric(0,359.9m,1);
+    private readonly NumericUpDown observerAzimuth=Numeric(0,359.9m,1);
+    private Button drawDirection=null!;
+
     private readonly ComboBox precision=new(){Width=276,DropDownStyle=ComboBoxStyle.DropDownList};
     private readonly TextBox name=new(){Width=276};
     private readonly NumericUpDown x=Numeric(-180,180,3),y=Numeric(-180,180,3),width=Numeric((decimal)RasterGrid.MinLayerSizeMm,240,3),height=Numeric((decimal)RasterGrid.MinLayerSizeMm,240,3),angle=Numeric(-36000,36000,2),opacity=Numeric(0,100,0);
@@ -42,7 +57,8 @@ public sealed class MainForm : ResponsiveForm
         var menu=BuildMenu();
         var toolbar=new WrappingFlowPanel{Dock=DockStyle.Top,AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,MinimumSize=new Size(0,48),Padding=new Padding(10,6,8,6),WrapContents=true,BackColor=Color.White};
         toolbar.Controls.AddRange([Button(Ui.Text("导入图片"),Import),Button(Ui.Text("添加文字"),()=>Add("text")),Button(Ui.Text("矩形"),()=>Add("rectangle")),Button(Ui.Text("椭圆"),()=>Add("ellipse")),Button(Ui.Text("撤销"),Undo),Button(Ui.Text("重做"),Redo),Button(Ui.Text("整盘"),Canvas.FitDisc),Button(Ui.Text("设计区"),Canvas.FocusDesign)]);
-        toolbar.Controls.Add(new Label{Text=Ui.Text("连续彩色"),AutoSize=true,ForeColor=Color.FromArgb(28,105,112),Padding=new Padding(8,7,8,0)});
+        toolbar.Controls.Add(colourMethod);
+        colourMethod.SelectedIndexChanged+=(_,_)=>{if(loading||Document is null)return;PushUndo();Document.ColourMethod=colourMethod.SelectedIndex==0?"ladder":"measured";ContinuousDesign.Prepare(Document);Document.Format=Document.Layers.Any(l=>l.LadderViewing is not null)?"disc-color-design-v8":Document.Layers.Any(l=>l.LadderPlacement is not null)?"disc-color-design-v7":Document.Layers.Any(l=>l.LadderObservation is not null)?"disc-color-design-v6":Document.UsesLadder?"disc-color-design-v5":"disc-color-design-v4";RefreshInspector();Changed();};
         toolbar.Controls.Add(Button(Ui.Text("保存工程"),()=>Save(false)));
         var burn=Button(Ui.Text("烧录光盘…"),BurnDisc);burn.BackColor=Color.FromArgb(37,110,210);burn.ForeColor=Color.White;burn.FlatStyle=FlatStyle.Flat;toolbar.Controls.Add(burn);
         toolbar.Controls.Add(Button(Ui.Text("DIS 校准…"),ImportGeometry));
@@ -56,10 +72,10 @@ public sealed class MainForm : ResponsiveForm
         inspector.Controls.Add(inspectorContent);
         body.Controls.Add(new EditorWorkspace(layerPanel,Canvas,inspector));BuildInspector();
         var footer=new StatusStrip{SizingGrip=true};footer.Items.Add(status);footer.Items.Add(cursor);
-        Controls.Add(body);Controls.Add(toolbar);Controls.Add(menu);Controls.Add(footer);MainMenuStrip=menu;
+        BuildViewing();Controls.Add(body);Controls.Add(viewing);Controls.Add(toolbar);Controls.Add(menu);Controls.Add(footer);MainMenuStrip=menu;
         layers.SelectedIndexChanged+=(_,_)=>{if(!loading&&layers.SelectedItem is Layer l)Select(l.Id);};
         layers.ItemCheck+=(_,e)=>{if(!loading){PushUndo();((Layer)layers.Items[e.Index]).Visible=e.NewValue==CheckState.Checked;Changed();}};
-        Canvas.SelectionChanged+=Select;Canvas.BeginEdit+=PushUndo;
+        Canvas.SelectionChanged+=Select;Canvas.BeginEdit+=PushUndo;Canvas.ObservationEdited+=()=>{RefreshInspector();ResetViewing();};
         Canvas.LayerEdited+=()=>{if(Environment.TickCount64-lastInspectorUpdate>80){RefreshInspector();lastInspectorUpdate=Environment.TickCount64;}Changed(false);};
         Canvas.RenderStatus+=text=>status.Text=text;Canvas.ViewportChanged+=Schedule;Canvas.CursorPositionChanged+=text=>cursor.Text=text;
         redraw.Tick+=(_,_)=>{redraw.Stop();try{Canvas.RefreshArtwork();}catch(Exception e){status.Text=e.Message;}};
@@ -71,6 +87,37 @@ public sealed class MainForm : ResponsiveForm
         CompleteLayout();
     }
 
+    private void BuildViewing()
+    {
+        viewing.Controls.Add(simulationCaption);viewing.Controls.Add(previewMode);viewing.Controls.Add(observation);
+        void Number(string title,NumericUpDown n)
+        {var group=new FlowLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,WrapContents=false,Margin=new Padding(5,0,0,0)};n.Width=84;
+         group.Controls.Add(new Label{Text=Ui.Text(title),AutoSize=true,Margin=new Padding(0,6,2,0)});group.Controls.Add(n);viewing.Controls.Add(group);}
+        Number("转盘 / °",viewRotation);Number("倾斜 X / °",viewTiltX);Number("倾斜 Y / °",viewTiltY);Number("左右移动 / mm",headShift);
+        viewing.Controls.Add(Button(Ui.Text("对准选中图片"),()=>{if(Canvas.Selected is {} l){viewingLoading=true;observation.SelectedIndex=1;sharedReference=LadderReference.From(l);viewRotation.Value=viewTiltX.Value=viewTiltY.Value=headShift.Value=0;viewingLoading=false;UpdateViewing();}}));
+        viewing.Controls.Add(Button(Ui.Text("重置视角"),ResetViewing));
+        previewMode.SelectedIndexChanged+=(_,_)=>UpdateViewing();observation.SelectedIndexChanged+=(_,_)=>UpdateViewing();
+        viewRotation.ValueChanged+=(_,_)=>UpdateViewing();viewTiltX.ValueChanged+=(_,_)=>UpdateViewing();viewTiltY.ValueChanged+=(_,_)=>UpdateViewing();headShift.ValueChanged+=(_,_)=>UpdateViewing();
+        hints.SetToolTip(observation,Ui.Text("逐图参考视角分别展示每张图片的设计视角；统一视角用同一转盘姿态观察整盘。"));
+        hints.SetToolTip(viewRotation,Ui.Text("改变观察姿态，使用既有配方预测颜色；导出配方保持不变。"));
+    }
+    private void ResetViewing()
+    {viewingLoading=true;sharedReference=null;observation.SelectedIndex=0;viewRotation.Value=viewTiltX.Value=viewTiltY.Value=headShift.Value=0;previewMode.SelectedIndex=0;viewingLoading=false;UpdateViewing();}
+    private void RefreshViewing()
+    {
+        viewingLoading=true;int mode=Math.Max(0,previewMode.SelectedIndex),obs=Math.Max(0,observation.SelectedIndex);
+        previewMode.Items.Clear();previewMode.Items.AddRange([Ui.Text("模拟颜色"),Ui.Text("调整后的原图")]);previewMode.SelectedIndex=mode;
+        observation.Items.Clear();observation.Items.AddRange([Ui.Text("逐图参考视角"),Ui.Text("统一转盘视角")]);observation.SelectedIndex=obs;
+        foreach(Control c in viewing.Controls.Cast<Control>().Where(c=>c!=previewMode && c!=simulationCaption))c.Visible=Document.UsesLadder;
+        viewingLoading=false;
+    }
+    private void UpdateViewing()
+    {
+        if(loading||viewingLoading||Document is null)return;
+        Canvas.ViewMode=previewMode.SelectedIndex==1?2:0;
+        Canvas.Simulation=new(observation.SelectedIndex==1,(double)viewRotation.Value,(double)viewTiltX.Value,(double)viewTiltY.Value,observation.SelectedIndex==1?sharedReference:null,(double)headShift.Value);
+        Canvas.InvalidateArtwork();Schedule();
+    }
     private MenuStrip BuildMenu()
     {
         var menu=new MenuStrip{BackColor=Color.White};var file=new ToolStripMenuItem(Ui.Text("文件"));var edit=new ToolStripMenuItem(Ui.Text("编辑"));var help=new ToolStripMenuItem(Ui.Text("帮助"));
@@ -80,6 +127,7 @@ public sealed class MainForm : ResponsiveForm
         edit.DropDownItems.Add(Ui.Text("撤销  Ctrl+Z"),null,(_,_)=>Undo());edit.DropDownItems.Add(Ui.Text("重做  Ctrl+Y"),null,(_,_)=>Redo());
         edit.DropDownItems.Add(Ui.Text("复制图层  Ctrl+D"),null,(_,_)=>Duplicate());edit.DropDownItems.Add(Ui.Text("删除图层  Delete"),null,(_,_)=>Delete());
         help.DropDownItems.Add(Ui.Text("使用方法"),null,(_,_)=>Process.Start(new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory,Ui.HelpFileName)){UseShellExecute=true}));
+        help.DropDownItems.Add(Ui.Text("周期梯说明"),null,(_,_)=>Process.Start(new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory,Ui.IsEnglish?"LadderGuide.html":"周期梯说明.html")){UseShellExecute=true}));
         help.DropDownItems.Add(Ui.Text("语言…"),null,(_,_)=>ChangeLanguage());
         help.DropDownItems.Add(Ui.Text("关于"),null,(_,_)=>MessageBox.Show(this,Ui.Format("Disc Color Studio {0}\n基于 DiscImageStudio 的 DVD 编码与刻录组件。\n许可证：GNU GPL v3。",typeof(MainForm).Assembly.GetName().Version!.ToString(3)),Ui.Text("关于")));
         menu.Items.AddRange([file,edit,help]);return menu;
@@ -128,7 +176,18 @@ public sealed class MainForm : ResponsiveForm
     {
         inspectorContent.Controls.Add(selection);inspectorContent.Controls.Add(sync);sync.Click+=(_,_)=>Synchronize();
         hints.SetToolTip(sync,Ui.Text("同步光线、颜色、纹理与采样设置，并用于之后导入的图片。"));
-        inspectorContent.Controls.AddRange([lightSection,colorSection,textureSection,layoutSection]);
+        inspectorContent.Controls.AddRange([directionSection,lightSection,colorSection,textureSection,layoutSection]);
+        Field(directionSection.Body,Ui.Text("观察时盘面摆位 / °"),directionAzimuth);
+        directionSection.Body.Controls.Add(new Label{AutoSize=true,Text=Ui.Text("3 点钟为 0°，顺时针度数增加。"),ForeColor=Color.SlateGray,Margin=new Padding(0,0,0,8)});
+        Field(directionSection.Body,Ui.Text("观察者方向 / °"),observerAzimuth);
+        hints.SetToolTip(directionAzimuth,Ui.Text("观看这张图片时，整张光盘绕盘心顺时针旋转的角度。"));
+        hints.SetToolTip(observerAzimuth,Ui.Text("图片转到所设摆位后，指向观察者的方向：右 0°、下 90°、左 180°、上 270°。"));
+        drawDirection=Button(Ui.Text("拖箭头指向观察者"),()=>{Canvas.BeginObservationArrow();status.Text=Ui.Text("从图片向观察者方位拖箭头；Esc 取消，Shift 吸附 15°。");});
+        directionSection.Body.Controls.Add(drawDirection);
+        directionSection.Body.Controls.Add(new Label{AutoSize=true,Text=Ui.Text("两个设置可随时调整；箭头从图片指向观察者。"),ForeColor=Color.SlateGray,Margin=new Padding(0,6,0,8)});
+        directionSection.Body.Controls.Add(Button(Ui.Text("恢复默认观看设置"),()=>{Edit(l=>{l.LadderViewing=null;l.LadderPlacement=null;l.LadderObservation=null;});ResetViewing();}));
+        directionAzimuth.ValueChanged+=(_,_)=>EditDirection(true,(double)directionAzimuth.Value);
+        observerAzimuth.ValueChanged+=(_,_)=>EditDirection(false,(double)observerAzimuth.Value);
         lightSection.Body.Controls.AddRange([exposure,brightness,contrast]);
         lightSection.Body.Controls.Add(Button(Ui.Text("重置光线"),()=>{EditAppearance(l=>{l.InputExposure=1;l.Brightness=0;l.Contrast=1;});RefreshInspector();}));
         Bind(exposure,(l,v)=>l.InputExposure=v/100);Bind(brightness,(l,v)=>l.Brightness=v);Bind(contrast,(l,v)=>l.Contrast=v/100);
@@ -156,6 +215,7 @@ public sealed class MainForm : ResponsiveForm
         hints.SetToolTip(banding,Ui.Text("提高强度，让相邻角度的纹理配方过渡更平滑。"));hints.SetToolTip(mixing,Ui.Text("提高强度，按图片颜色与盘面位置混合相近纹理。"));
         preferDark.CheckedChanged+=(_,_)=>{if(!loading)EditAppearance(l=>l.PreferDisDark=preferDark.Checked);};
         precision.Items.AddRange(RasterGrid.Sizes.Select(size=>new GridChoice(size)).ToArray());Field(textureSection.Body,Ui.Text("采样精度"),precision);
+        precisionCaption=(Label)textureSection.Body.Controls[textureSection.Body.Controls.Count-2];
         precision.SelectedIndexChanged+=(_,_)=>{if(!loading&&precision.SelectedItem is GridChoice choice)EditAppearance(l=>l.RasterSize=choice.Size);};
         textureSection.Body.Controls.Add(Button(Ui.Text("重置纹理设置"),()=>{EditAppearance(l=>{l.BandingReduction=1;l.AdaptiveMixing=1;l.PreferDisDark=false;l.RasterSize=RasterGrid.DefaultSize;});RefreshInspector();}));
         Field(layoutSection.Body,Ui.Text("名称"),name);Field(layoutSection.Body,Ui.Text("中心 X / mm"),x);Field(layoutSection.Body,Ui.Text("中心 Y / mm"),y);
@@ -168,6 +228,11 @@ public sealed class MainForm : ResponsiveForm
         height.ValueChanged+=(_,_)=>Edit(l=>{double ratio=(double)height.Value/l.Height;l.Height=(double)height.Value;if(l.KeepAspect)l.Width=Math.Clamp(l.Width*ratio,RasterGrid.MinLayerSizeMm,240);});
         angle.ValueChanged+=(_,_)=>Edit(l=>l.Rotation=(double)angle.Value);opacity.ValueChanged+=(_,_)=>Edit(l=>l.Opacity=(double)opacity.Value/100);
         aspect.CheckedChanged+=(_,_)=>Edit(l=>l.KeepAspect=aspect.Checked);
+    }
+    private void EditDirection(bool disc,double angle)
+    {
+        if(loading || !Document.UsesLadder)return;
+        Edit(l=>{if(disc)LadderViewing.SetDisc(l,angle);else LadderViewing.SetObserver(l,angle);});ResetViewing();
     }
     private void EditAppearance(Action<Layer> apply,bool saveUndo=true)
     {
@@ -194,6 +259,12 @@ public sealed class MainForm : ResponsiveForm
     private void RefreshInspector()
     {
         loading=true;var l=Canvas.Selected;bool image=l?.Kind=="image";
+        colourMethod.Items.Clear();colourMethod.Items.AddRange([Ui.Text("周期梯保色"),Ui.Text("实测彩色")]);colourMethod.SelectedIndex=Document.UsesLadder?0:1;
+        banding.SetLabel(Document.UsesLadder?"视角平衡":"条带平滑");mixing.Visible=preferDark.Visible=!Document.UsesLadder;precision.Visible=precisionCaption.Visible=true;RefreshViewing();
+        hints.SetToolTip(banding,Ui.Text(Document.UsesLadder?"兼顾双眼与轻微倾斜时的颜色。提高强度会在中心颜色与相邻视角之间折中。":"提高强度，让相邻角度的纹理配方过渡更平滑。"));
+        directionSection.Visible=Document.UsesLadder;directionSection.Body.Enabled=l is not null;
+        directionAzimuth.Value=(decimal)Math.Min(359.9,l is null?0:LadderViewing.Current(l).DiscRotation);
+        observerAzimuth.Value=(decimal)Math.Min(359.9,l is null?180:LadderViewing.Current(l).ObserverAzimuth);
         selection.Text=l is null?Ui.Text("选择图片开始调整"):l.Name;sync.Enabled=image;
         lightSection.Body.Enabled=colorSection.Body.Enabled=textureSection.Body.Enabled=image;layoutSection.Body.Enabled=l is not null;
         static void Set(NumericUpDown control,double v)=>control.Value=Math.Clamp((decimal)v,control.Minimum,control.Maximum);
@@ -220,11 +291,11 @@ public sealed class MainForm : ResponsiveForm
         bool prior=loading;loading=true;layers.Items.Clear();foreach(var layer in Document.Layers.AsEnumerable().Reverse())layers.Items.Add(layer,layer.Visible);
         if(Canvas.SelectedId is not null)layers.SelectedIndex=layers.Items.Cast<Layer>().ToList().FindIndex(l=>l.Id==Canvas.SelectedId);loading=prior;
     }
-    private void Select(string? id){Canvas.SelectedId=id;RefreshLayers();RefreshInspector();Canvas.Invalidate();}
+    private void Select(string? id){if(Canvas.SelectedId!=id)Canvas.CancelObservationArrow();Canvas.SelectedId=id;RefreshLayers();RefreshInspector();Canvas.Invalidate();}
     private void SetDocument(Design design,string? path)
     {
-        bool migrated=ContinuousDesign.Prepare(design);design.Format="disc-color-design-v4";
-        Document=design;Canvas.Document=design;Canvas.ViewMode=0;Canvas.SelectedId=design.Layers.LastOrDefault()?.Id;
+        bool migrated=ContinuousDesign.Prepare(design);design.Format=design.Layers.Any(l=>l.LadderViewing is not null)?"disc-color-design-v8":design.Layers.Any(l=>l.LadderPlacement is not null)?"disc-color-design-v7":design.Layers.Any(l=>l.LadderObservation is not null)?"disc-color-design-v6":design.UsesLadder?"disc-color-design-v5":"disc-color-design-v4";
+        Canvas.CancelObservationArrow();sharedReference=null;headShift.Value=0;Document=design;Canvas.Document=design;RefreshViewing();Canvas.ViewMode=0;Canvas.Simulation=new();viewingLoading=true;previewMode.SelectedIndex=0;observation.SelectedIndex=0;viewRotation.Value=viewTiltX.Value=viewTiltY.Value=0;viewingLoading=false;Canvas.SelectedId=design.Layers.LastOrDefault()?.Id;
         projectPath=path;dirty=false;undo.Clear();redo.Clear();RefreshLayers();RefreshInspector();Canvas.FitDisc();Schedule();UpdateTitle();
         if(migrated&&path is not null){projectPath=null;dirty=true;UpdateTitle();status.Text=Ui.Text("已切换到连续彩色，保存时将创建新工程。");}
     }
@@ -324,6 +395,7 @@ public sealed class MainForm : ResponsiveForm
     private void Fail(Exception error) => MessageBox.Show(this, error.Message, Ui.Text("操作未完成"), MessageBoxButtons.OK, MessageBoxIcon.Error);
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if(keyData==Keys.Escape && Canvas.DrawingObservation){Canvas.CancelObservationArrow();return true;}
         if (keyData == (Keys.Control | Keys.S)) { Save(false); return true; }
         if (keyData == (Keys.Control | Keys.O)) { Open(); return true; }
         if (keyData == (Keys.Control | Keys.N)) { New(); return true; }

@@ -38,6 +38,7 @@ public static class DvdImageEncoder
     }
     internal static void Write(Design design,Stream output,uint start,uint count,IProgress<EncodingProgress>? progress,CancellationToken cancellation)
     {
+        if(design.UsesLadder){LadderEncoder.Write(design,output,start,count,progress,cancellation);return;}
         using var sampler=new Sampler(design,cancellation);sampler.Prepare(progress,cancellation);
         var g=design.Geometry;
         var mapping=new ImageMappingOptions(checked((uint)g.Sectors),g.InnerRadiusMm,g.OuterRadiusMm,133.3,0,true,128,1,PitchLinear:g.PitchLinear,PitchQuadratic:g.PitchQuadratic,PitchCubic:g.PitchCubic);

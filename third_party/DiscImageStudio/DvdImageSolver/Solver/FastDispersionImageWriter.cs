@@ -39,12 +39,13 @@ public static class FastDispersionImageWriter
         Stream output,
         MultiBlockSolveOptions options,
         Action<FastDvdStreamProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<uint,byte[]>? finishBlock = null)
     {
         ArgumentNullException.ThrowIfNull(sampleScrambledByte);
         ValidateStream(output, options);
         PayloadImageSampler sampler = new(
-            sampleScrambledByte, options.ImageMapping);
+            sampleScrambledByte, options.ImageMapping) { FinishBlock=finishBlock };
         return WriteSampledStream(sampler, output, options, progress, cancellationToken);
     }
 
@@ -215,6 +216,13 @@ public static class FastDispersionImageWriter
             }
         }
 
+        // The optional finalizer assembles contiguous carrier strings in scrambled payload space.
+        if (sampler.FinishBlock is {} finish)
+        {
+            for (int sector=0;sector<16;sector++) DvdDataFrameBuilder.TransformPayloadScrambling(payloads.AsSpan(sector*2048,2048),firstPsn+(uint)sector);
+            finish(lba,payloads);
+            for (int sector=0;sector<16;sector++) DvdDataFrameBuilder.TransformPayloadScrambling(payloads.AsSpan(sector*2048,2048),firstPsn+(uint)sector);
+        }
         return new GeneratedBlock(lba, payloads, controlledWords);
     }
 
@@ -279,6 +287,7 @@ public static class FastDispersionImageWriter
 
     private sealed class PayloadImageSampler
     {
+        internal Action<uint,byte[]>? FinishBlock { get; init; }
         private readonly Func<DvdCodewordSample, byte> _sampleScrambledCodeword;
         private readonly ArchimedeanSpiral _spiral;
         private readonly double _bitLengthMm, _startAngleRadians, _direction;

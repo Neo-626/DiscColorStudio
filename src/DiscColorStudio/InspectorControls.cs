@@ -22,7 +22,8 @@ internal sealed class InspectorSection : VerticalStack, ILocalizedControl
 internal sealed class AdjustmentSlider : UserControl, ILocalizedControl
 {
     private readonly Label caption;
-    private readonly string labelKey, unit;
+    private string labelKey;
+    private readonly string unit;
     private readonly NumericUpDown number;
     private readonly TrackBar slider;
     private bool syncing, dragging;
@@ -74,6 +75,7 @@ internal sealed class AdjustmentSlider : UserControl, ILocalizedControl
         string label = Ui.Text(labelKey); caption.Text = label + (unit.Length > 0 ? " / " + unit : "");
         number.AccessibleName = label; slider.AccessibleName = label + Ui.Text("滑块"); Parent?.PerformLayout();
     }
+    internal void SetLabel(string text) { labelKey=text;RefreshLanguage(); }
     internal void SetRange(int min, int max)
     { syncing = true; number.Minimum = min; number.Maximum = max; slider.Minimum = min; slider.Maximum = max; syncing = false; }
     internal void SetValue(double value)

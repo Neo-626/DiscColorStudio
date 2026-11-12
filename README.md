@@ -6,7 +6,19 @@ A Windows tool for burning color images onto the **data side of ordinary DVD-R d
 
 **Supported media: new, blank single-layer DVD-R (4.7 GB) only.**
 
+## New in v0.8.5: Band ladder
+
+**Band ladder trades color fidelity and brightness for a wider viewing-angle range.**
+
+The measured-color method remains available in the toolbar. New projects use **Band ladder**, which interleaves a range of recording periods and calculates their color mixtures from the image content, disc position, and viewing setup.
+
+Each image has independent **Disc orientation for viewing** and **Direction toward viewer** settings. Enter values or draw an arrow from the image toward the viewer; either setting can be changed at any time. Simulated color and DVD encoding use the same recipe.
+
+[Band-ladder guide with screenshots](docs/BandLadder.md) · [Download v0.8.5](https://github.com/Neo-626/DiscColorStudio/releases/tag/v0.8.5)
+
 ## Disc demos
+
+The demonstrations below use the measured-color method.
 
 Four illustrations, shown alongside close-ups of their burned results.
 
@@ -96,6 +108,8 @@ If you try other discs, please share your results in an [Issue](https://github.c
 <a id="功能与使用"></a>
 
 ## Usage guide
+
+For the new band-ladder controls, see the [band-ladder guide](docs/BandLadder.md). The adjustment examples below use the measured-color method.
 
 Follow these eight steps to make a color disc. Red boxes highlight the controls; click a screenshot to enlarge it.
 

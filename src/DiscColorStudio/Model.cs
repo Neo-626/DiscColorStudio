@@ -73,6 +73,9 @@ public sealed class Layer
     public bool BypassColorMixer { get; set; }
     public bool? AngleColorEnabled { get; set; }
     public double? AngleCenterBeta { get; set; }
+    public LadderViewing? LadderViewing { get; set; }
+    public LadderPlacement? LadderPlacement { get; set; }
+    public LadderObservation? LadderObservation { get; set; }
     public bool PreferDisDark { get; set; }
     public double BandingReduction { get; set; }=1;
     public double AdaptiveMixing { get; set; }=1;
@@ -94,9 +97,12 @@ public sealed class Layer
 
 public sealed class Design
 {
+    public string ColourMethod { get; set; } = "measured";
+    public string LadderModelVersion { get; set; } = "ladder-full-response-1";
+    [JsonIgnore] public bool UsesLadder => ColourMethod == "ladder";
     public AngleColorSettings? AngleColor { get; set; }
     [JsonIgnore] public Dictionary<string,byte[]> AngleProfileAssets { get; set; } = [];
-    [JsonIgnore] public bool HasAngleColor => Layers.Any(UsesAngleColor);
+    [JsonIgnore] public bool HasAngleColor => !UsesLadder && Layers.Any(UsesAngleColor);
     public bool UsesAngleColor(Layer layer) => AngleColor?.Enabled==true && (layer.Kind=="image" || layer.FillArgb.HasValue) && layer.Visible && layer.Opacity>0 && layer.AngleColorEnabled!=false && layer.QuantizationMode!="dis";
     public string Format { get; set; } = "disc-color-design-v1";
     // Missing in old files => legacy reproduction. The UI explicitly upgrades a copy.
@@ -151,7 +157,7 @@ public sealed class Design
     public int ImageRasterSize(Layer layer)
     {
         int size = layer.Kind == "image" ? layer.RasterSize ?? RasterSize : RasterSize;
-        return UsesAngleColor(layer) || RasterGrid.SupportsTiles(ImageMode(layer)) ? size : Math.Min(size, RasterGrid.MaxLegacySize);
+        return UsesLadder || UsesAngleColor(layer) || RasterGrid.SupportsTiles(ImageMode(layer)) ? size : Math.Min(size, RasterGrid.MaxLegacySize);
     }
 
     public static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -161,7 +167,7 @@ public sealed class Design
         string palette = File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"data","palette.json"));
         using var p = JsonDocument.Parse(palette);
         var names = new Dictionary<int,string> { [4]=Ui.Text("橙红"),[13]=Ui.Text("青绿"),[7]=Ui.Text("黄褐"),[2]=Ui.Text("紫红"),[14]=Ui.Text("底色") };
-        var result = new Design { Geometry = new Geometry { InnerRadiusMm=24,OuterRadiusMm=58,Sectors=2297888 },
+        var result = new Design { ColourMethod="ladder", Geometry = new Geometry { InnerRadiusMm=24,OuterRadiusMm=58,Sectors=2297888 },
             PaletteRecordJson=palette,RasterSize=rasterSize };
         foreach (var s in p.RootElement.GetProperty("motifs").EnumerateArray())
         {
@@ -186,6 +192,10 @@ public sealed class Design
     }
     internal Design ForStorage()
     {
+        if(Layers.Any(l=>l.LadderViewing is not null)){var v8=Clone();v8.Format="disc-color-design-v8";return v8;}
+        if(Layers.Any(l=>l.LadderPlacement is not null)){var v7=Clone();v7.Format="disc-color-design-v7";return v7;}
+        if(Layers.Any(l=>l.LadderObservation is not null)){var v6=Clone();v6.Format="disc-color-design-v6";return v6;}
+        if(UsesLadder){var v5=Clone();v5.Format="disc-color-design-v5";return v5;}
         if(AngleColor is not null){var v4=Clone();v4.Format="disc-color-design-v4";return v4;}
         if(RequiresColorV3){var v3=Clone();v3.Format="disc-color-design-v3";return v3;}
         if(!RequiresColorV2 || Format.EndsWith("-v2",StringComparison.Ordinal))return this;
@@ -193,7 +203,9 @@ public sealed class Design
     }
     public void Validate()
     {
-        if (Format is not ("disc-color-design-v1" or "disc-color-design-v2" or "disc-color-design-v3" or "disc-color-design-v4")) throw new InvalidDataException(Ui.Text("不是受支持的彩色盘面工程。"));
+        if (Format is not ("disc-color-design-v1" or "disc-color-design-v2" or "disc-color-design-v3" or "disc-color-design-v4" or "disc-color-design-v5" or "disc-color-design-v6" or "disc-color-design-v7" or "disc-color-design-v8")) throw new InvalidDataException(Ui.Text("不是受支持的彩色盘面工程。"));
+        if(ColourMethod is not ("measured" or "ladder"))throw new InvalidDataException("Unknown colour method");
+        if(UsesLadder && LadderModelVersion!="ladder-full-response-1")throw new InvalidDataException("Unsupported band-ladder model version");
         AngleColor?.Validate(AngleProfileAssets);
         Geometry.Validate();
         ImageDefaults?.Validate();
@@ -205,7 +217,7 @@ public sealed class Design
         if(!double.IsFinite(DitherTolerance) || DitherTolerance is < 0 or > 20 || !double.IsFinite(FlatThreshold) || FlatThreshold is < 0 or > 64)
             throw new InvalidDataException(Ui.Text("网点阈值无效。"));
         if (!RasterGrid.Sizes.Contains(RasterSize)) throw new InvalidDataException(Ui.Text("设计采样精度无效。"));
-        if (RasterGrid.IsTiled(RasterSize) && !RasterGrid.SupportsTiles(QuantizationMode))
+        if (!UsesLadder && RasterGrid.IsTiled(RasterSize) && !RasterGrid.SupportsTiles(QuantizationMode))
             throw new InvalidDataException(Ui.Text("旧版误差扩散最高支持 8192 格。请选择直接限色或局部互色进行高精导出。"));
         if (Palette.Count is < 2 or > 256 || Palette.Select(s => s.Id).Distinct().Count() != Palette.Count
             || Palette.Any(s => s.Id is < 1 or > 254 || s.CameraRgb.Length != 3 || s.CameraRgb.Any(v => !double.IsFinite(v) || v is < 0 or > 255)
@@ -219,6 +231,9 @@ public sealed class Design
         {
             if(!double.IsFinite(l.BandingReduction)||l.BandingReduction is <0 or >1||!double.IsFinite(l.AdaptiveMixing)||l.AdaptiveMixing is <0 or >1)throw new InvalidDataException(Ui.Text("单图混色强度无效。"));
             if(l.AngleCenterBeta is double beta && (!double.IsFinite(beta)||beta<(AngleColor?.WindowStartDeg??0)||beta>(AngleColor?.WindowEndDeg??360)))throw new InvalidDataException(Ui.Text("单图观看角度无效。"));
+            l.LadderViewing?.Validate();
+            l.LadderPlacement?.Validate();
+            l.LadderObservation?.Validate();
             l.ColorMixer?.Validate();
             l.OutputCompensation?.Validate();
             if(l.OutputCompensation?.Active==true && (l.Kind!="image" || ImageMode(l)=="dis"))throw new InvalidDataException(Ui.Text("全图补偿仅适用于彩色图片。"));

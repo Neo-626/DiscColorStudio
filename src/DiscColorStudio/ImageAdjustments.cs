@@ -38,6 +38,7 @@ public static class ContinuousDesign
 {
     public static bool Prepare(Design design)
     {
+        if(design.UsesLadder){design.ImageDefaults??=new ImageAdjustments{RasterSize=design.RasterSize};return false;}
         bool changed=!AngleColorSettings.IsCurrent(design);
         AngleColorSettings.Attach(design,changed);
         changed|=design.AngleColor!.Enabled==false||design.RegistrationMarks||design.ColorModelVersion!=2||design.QuantizationMode!="adaptive";
