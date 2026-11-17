@@ -69,7 +69,7 @@ public sealed class ColorMixer
         return Color.FromArgb(color.A,Byte(r+m),Byte(g+m),Byte(b+m));
     }
     public Bitmap Render(Bitmap original) => Render(original,default);
-    internal unsafe Bitmap Render(Bitmap original, CancellationToken cancellation)
+    internal unsafe Bitmap Render(Bitmap original, CancellationToken cancellation,int? parallelism=null,Action<int,Action<int>>? schedule=null)
     {
         var result=original.Clone(new Rectangle(0,0,original.Width,original.Height),PixelFormat.Format32bppArgb);
         if(IsIdentity)return result;
@@ -78,22 +78,28 @@ public sealed class ColorMixer
         try
         {
             int width=result.Width,height=result.Height,stride=bits.Stride;IntPtr scan=bits.Scan0;
-            Parallel.For(0,(height+31)/32,new ParallelOptions{CancellationToken=cancellation,MaxDegreeOfParallelism=Math.Min(8,Environment.ProcessorCount)},
-                ()=>{var keys=new int[65536];Array.Fill(keys,-1);return (Keys:keys,Values:new int[65536]);},
-                (chunk,_,cache)=>
+            static (int[] Keys,int[] Values) CreateCache(){var keys=new int[65536];Array.Fill(keys,-1);return (keys,new int[65536]);}
+            void Chunk(int chunk,(int[] Keys,int[] Values) cache)
+            {
+                for(int y=chunk*32;y<Math.Min(height,(chunk+1)*32);y++)
                 {
-                    for(int y=chunk*32;y<Math.Min(height,(chunk+1)*32);y++)
+                    cancellation.ThrowIfCancellationRequested();int* row=(int*)((byte*)scan+y*stride);
+                    for(int x=0;x<width;x++)
                     {
-                        cancellation.ThrowIfCancellationRequested();int* row=(int*)((byte*)scan+y*stride);
-                        for(int x=0;x<width;x++)
-                        {
-                            int rgb=row[x]&0xffffff,k=(int)(unchecked((uint)rgb*2654435761u)>>16);
-                            if(cache.Keys[k]!=rgb){cache.Keys[k]=rgb;cache.Values[k]=ApplyCore(Color.FromArgb(unchecked((int)0xff000000)|rgb)).ToArgb()&0xffffff;}
-                            row[x]=(row[x]&unchecked((int)0xff000000))|cache.Values[k];
-                        }
+                        int rgb=row[x]&0xffffff,k=(int)(unchecked((uint)rgb*2654435761u)>>16);
+                        if(cache.Keys[k]!=rgb){cache.Keys[k]=rgb;cache.Values[k]=ApplyCore(Color.FromArgb(unchecked((int)0xff000000)|rgb)).ToArgb()&0xffffff;}
+                        row[x]=(row[x]&unchecked((int)0xff000000))|cache.Values[k];
                     }
-                    return cache;
-                },_=>{});
+                }
+            }
+            if(schedule is null)
+                Parallel.For(0,(height+31)/32,new ParallelOptions{CancellationToken=cancellation,MaxDegreeOfParallelism=parallelism??Math.Min(8,Environment.ProcessorCount)},
+                    CreateCache,(chunk,_,cache)=>{Chunk(chunk,cache);return cache;},_=>{});
+            else
+            {
+                using var caches=new ThreadLocal<(int[] Keys,int[] Values)>(CreateCache);
+                schedule((height+31)/32,chunk=>Chunk(chunk,caches.Value));
+            }
         }
         catch {result.UnlockBits(bits);result.Dispose();throw;}
         result.UnlockBits(bits);return result;

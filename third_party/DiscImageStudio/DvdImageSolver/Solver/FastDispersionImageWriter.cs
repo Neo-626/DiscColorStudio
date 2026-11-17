@@ -1,5 +1,7 @@
 // Adapted from DiscImageStudio v1.4.0: retained analytic DVD streaming only.
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
 using System.Runtime.Intrinsics;
 using DvdImageSolver.Encoding;
 
@@ -72,11 +74,11 @@ public static class FastDispersionImageWriter
         MultiBlockSolveOptions options,
         Action<FastDvdStreamProgress>? progress,
         CancellationToken cancellationToken)
-        => WriteBlockStream((index, buffer) => GenerateBlock(index, sampler, options, buffer, cancellationToken),
+        => WriteBlockStream((index, buffer, token) => GenerateBlock(index, sampler, options, buffer, token),
             output, options, progress, cancellationToken);
 
     private static FastDvdStreamSummary WriteBlockStream(
-        Func<int, byte[], GeneratedBlock> generateBlock,
+        Func<int, byte[], CancellationToken, GeneratedBlock> generateBlock,
         Stream output,
         MultiBlockSolveOptions options,
         Action<FastDvdStreamProgress>? progress,
@@ -86,43 +88,81 @@ public static class FastDispersionImageWriter
         int parallelism = options.FastParallelism == 0
             ? Environment.ProcessorCount
             : options.FastParallelism;
-        ParallelOptions parallelOptions = new()
-        {
-            MaxDegreeOfParallelism = parallelism,
-            CancellationToken = cancellationToken,
-        };
-        int batchCapacity = Math.Min(totalBlocks, Math.Max(1, checked(parallelism * 2)));
-        GeneratedBlock[] generated = CreateBatchBuffers(batchCapacity);
+        int workerCount = Math.Min(totalBlocks, Math.Max(1, parallelism));
+        int capacity = Math.Min(totalBlocks, Math.Max(1, checked(workerCount * 2)));
+        GeneratedBlock[] generated = CreateBatchBuffers(capacity);
         long totalBytes = checked((long)options.FillSectors * DvdEccBlockEncoder.PayloadBytesPerSector);
         long bytesWritten = 0;
         long controlledWords = 0;
         Stopwatch stopwatch = Stopwatch.StartNew();
-        for (int batchStart = 0; batchStart < totalBlocks; batchStart += batchCapacity)
+        void Commit(int index, GeneratedBlock block)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int batchCount = Math.Min(batchCapacity, totalBlocks - batchStart);
-            Parallel.For(0, batchCount, parallelOptions, batchOffset =>
+            output.Write(block.Payloads);
+            bytesWritten = checked(bytesWritten + block.Payloads.Length);
+            controlledWords += block.ControlledWords;
+            progress?.Invoke(new FastDvdStreamProgress(index + 1, totalBlocks, block.Lba,
+                bytesWritten, totalBytes, stopwatch.Elapsed));
+        }
+        if (workerCount <= 1)
+        {
+            for (int index = 0; index < totalBlocks; index++)
+                Commit(index, generateBlock(index, generated[0].Payloads, cancellationToken));
+        }
+        else
+        {
+            // At most 2*workers blocks are live. A slot is reused only after the
+            // ordered writer consumes it; slow blocks no longer stop a whole batch.
+            using var stopped = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var jobs = new BlockingCollection<int>(capacity);
+            var ready = Enumerable.Range(0, capacity).Select(_ => new ManualResetEventSlim()).ToArray();
+            for (int i = 0; i < capacity; i++) jobs.Add(i);
+            ExceptionDispatchInfo? failure = null;
+            var workers = new Task[workerCount];
+            try
             {
-                int blockIndex = batchStart + batchOffset;
-                generated[batchOffset] = generateBlock(blockIndex, generated[batchOffset].Payloads);
-            });
-
-            for (int batchOffset = 0; batchOffset < batchCount; batchOffset++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                GeneratedBlock block = generated[batchOffset];
-                output.Write(block.Payloads);
-                bytesWritten = checked(bytesWritten + block.Payloads.Length);
-                controlledWords += block.ControlledWords;
-                int completedBlocks = batchStart + batchOffset + 1;
-                progress?.Invoke(new FastDvdStreamProgress(
-                    completedBlocks,
-                    totalBlocks,
-                    block.Lba,
-                    bytesWritten,
-                    totalBytes,
-                    stopwatch.Elapsed));
+                for (int n = 0; n < workerCount; n++)
+                    workers[n] = Task.Factory.StartNew(() =>
+                    {
+                        try
+                        {
+                            foreach (int index in jobs.GetConsumingEnumerable(stopped.Token))
+                            {
+                                int slot = index % capacity;
+                                generated[slot] = generateBlock(index, generated[slot].Payloads, stopped.Token);
+                                ready[slot].Set();
+                            }
+                        }
+                        catch (OperationCanceledException) when (stopped.IsCancellationRequested) { }
+                        catch (Exception ex)
+                        {
+                            Interlocked.CompareExchange(ref failure, ExceptionDispatchInfo.Capture(ex), null);
+                            stopped.Cancel();
+                        }
+                    }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+                for (int index = 0; index < totalBlocks; index++)
+                {
+                    int slot = index % capacity;
+                    ready[slot].Wait(stopped.Token);
+                    Commit(index, generated[slot]);
+                    ready[slot].Reset();
+                    if (index + capacity < totalBlocks) jobs.Add(index + capacity, stopped.Token);
+                }
             }
+            catch
+            {
+                // Preserve worker failures rather than reporting their wake-up
+                // cancellation as the cause. I/O/progress exceptions stay intact.
+                failure?.Throw();
+                throw;
+            }
+            finally
+            {
+                stopped.Cancel();
+                Task.WaitAll(workers.Where(t => t is not null).ToArray());
+                foreach (var signal in ready) signal.Dispose();
+            }
+            failure?.Throw();
         }
 
         output.Flush();
@@ -137,8 +177,7 @@ public static class FastDispersionImageWriter
 
     private static GeneratedBlock[] CreateBatchBuffers(int count)
     {
-        // Parallel.For joins before ordered synchronous writes. Reuse these
-        // bounded slots only after the complete previous batch was consumed.
+        // Bounded reusable payload slots; the ordered writer owns slot reuse.
         GeneratedBlock[] blocks = new GeneratedBlock[count];
         for (int index = 0; index < blocks.Length; index++)
             blocks[index] = new GeneratedBlock(0,

@@ -11,20 +11,37 @@ internal sealed class LadderField
     internal double Azimuth;
     internal static LadderField Build(Design design,Layer layer,Renderer renderer,int grid,Rectangle? crop=null,Action<int>? fitted=null,Action<string>? preparing=null)
     {
+        var prepared=Prepare(design,layer,renderer,grid,crop,preparing);
+        return Fit(design,prepared,renderer.Cancellation,Math.Min(8,Environment.ProcessorCount),fitted);
+    }
+    // GDI objects and renderer caches are accessed only during Prepare. Fit owns
+    // plain arrays, so independent export tiles can run without the renderer lock.
+    internal sealed record Prepared(LadderField Field,int[] Rgb);
+    internal static Prepared Prepare(Design design,Layer layer,Renderer renderer,int grid,Rectangle? crop=null,Action<string>? preparing=null)
+    {
         var bounds=Rectangle.Intersect(LayerPreview.Bounds(layer,grid),crop??new Rectangle(0,0,grid,grid));
         var pose=LadderPose.ForLayer(layer);int count=Math.Max(0,bounds.Width)*Math.Max(0,bounds.Height);
         var result=new LadderField{Azimuth=Math.Atan2(layer.Y,layer.X),Layer=layer,Bounds=bounds,Grid=grid,Pose=pose,Bands=new LadderPixel[count],U=new float[count],Alpha=new byte[count]};
-        if(count==0)return result;
+        if(count==0)return new(result,[]);
         var input=design.Clone();var background=input.Palette.Single(s=>s.Id==input.BackgroundId);background.CameraRgb=[0,0,0];
         preparing?.Invoke(layer.Name);
         using var coverage=renderer.Composite(input,new(grid,bounds),[layer],true,coverageOnly:true);
         result.Alpha=Renderer.ReadAlpha(coverage);
-        if (!result.Alpha.Any(a=>a!=0)) return result;
+        if (!result.Alpha.Any(a=>a!=0)) return new(result,[]);
         int index=design.Layers.FindIndex(l=>l.Id==layer.Id);
         using var source=renderer.Composite(input,new(grid,bounds),input.Layers.Take(index+1).ToArray());
-        var rgb=AngleColorEngine.Pixels(source);var model=LadderMath.Shared.Value;double step=120d/grid;
-        Parallel.For(0,bounds.Height,new ParallelOptions{CancellationToken=renderer.Cancellation,MaxDegreeOfParallelism=Math.Min(8,Environment.ProcessorCount)},row=>
+        return new(result,AngleColorEngine.Pixels(source));
+    }
+    internal static LadderField Fit(Design design,Prepared prepared,CancellationToken token,int parallelism,Action<int>? fitted=null,Action<int,Action<int>>? schedule=null)
+    {
+        token.ThrowIfCancellationRequested();
+        var result=prepared.Field;var rgb=prepared.Rgb;
+        if(rgb.Length==0)return result;
+        var bounds=result.Bounds;var layer=result.Layer;var pose=result.Pose;
+        var model=LadderMath.Shared.Value;double step=120d/result.Grid;
+        void Row(int row)
         {
+            token.ThrowIfCancellationRequested();
             Span<double> nearby=stackalloc double[6];double y=(bounds.Y+row+.5)*step-60;int completed=0;
             for(int col=0;col<bounds.Width;col++)
             {
@@ -34,7 +51,12 @@ internal sealed class LadderField
                 result.Bands[k]=model.Fit(rgb[k],u,nearby,layer.BandingReduction);completed++;
             }
             if(completed>0)fitted?.Invoke(completed);
-        });
+        }
+        // Export shares row chunks across its existing block workers. The preview
+        // can use Parallel.For independently; export creates no nested worker pool.
+        if(schedule is not null)schedule(bounds.Height,Row);
+        else if(parallelism==1){for(int row=0;row<bounds.Height;row++)Row(row);}
+        else Parallel.For(0,bounds.Height,new ParallelOptions{CancellationToken=token,MaxDegreeOfParallelism=parallelism},Row);
         return result;
     }
     internal bool Index(double x,double y,out int k)
@@ -98,15 +120,19 @@ internal sealed class LadderEncoder:IDisposable
     private readonly Source[] sources;
     private readonly LadderMath model=LadderMath.Shared.Value;
     private readonly Renderer renderer=new();
-    private readonly object cacheGate=new(),renderGate=new();
-    private readonly Dictionary<(int Layer,int X,int Y),Lazy<LadderField>> tiles=[];
+    private readonly object cacheGate=new();
+    private readonly SemaphoreSlim renderGate=new(1,1);
+    private readonly LadderParallelPlan plan;
+    private readonly LadderWorkQueue work;
+    private sealed class TileEntry{internal int Started,Completed;internal LadderField? Field;}
+    private readonly Dictionary<(int Layer,int X,int Y),TileEntry> tiles=[];
     private readonly Queue<(int Layer,int X,int Y)> order=[];
     private readonly ThreadLocal<Worker> workers;
     private const int TileSize=128;
-    private const int CacheLimit=1536; // <= 408 MiB of completed field arrays, independent of export grid.
-    internal LadderEncoder(Design document,IProgress<EncodingProgress>? progress,CancellationToken token)
+    internal LadderEncoder(Design document,IProgress<EncodingProgress>? progress,CancellationToken token,LadderParallelPlan? parallelPlan=null)
     {
-        activity=new(progress);design=document.Clone();renderer.Cancellation=token;renderer.ConfigureExportColorCache();
+        activity=new(progress);design=document.Clone();plan=parallelPlan??LadderParallelPlan.Current();
+        work=new(token,plan.Workers);renderer.Cancellation=work.Token;renderer.ColorParallelism=1;renderer.ColorSchedule=work.ForColors;renderer.ConfigureExportColorCache();
         sources=design.Layers.Where(l=>l.Visible&&l.Opacity>0).Select(l=>new Source(l,design.ImageRasterSize(l),LayerPreview.Bounds(l,design.ImageRasterSize(l)))).ToArray();
         workers=new(()=>new Worker(sources.Length),true);
         activity.Start();
@@ -116,20 +142,35 @@ internal sealed class LadderEncoder:IDisposable
     internal int[] Grids=>sources.Select(s=>s.Grid).ToArray();
     private LadderField Tile(int layer,int ix,int iy)
     {
-        var key=(layer,ix/TileSize,iy/TileSize);Lazy<LadderField> lazy;
+        var key=(layer,ix/TileSize,iy/TileSize);TileEntry entry;
         lock(cacheGate)
         {
-            if(!tiles.TryGetValue(key,out lazy!))
+            if(!tiles.TryGetValue(key,out entry!))
             {
-                var src=sources[layer];var bounds=Rectangle.Intersect(src.Bounds,new Rectangle(key.Item2*TileSize,key.Item3*TileSize,TileSize,TileSize));
-                lazy=new(()=>{lock(renderGate)return LadderField.Build(design,src.Layer,renderer,src.Grid,bounds,n=>activity.Fitted(src.Layer.Name,n),activity.Preparing);});tiles[key]=lazy;order.Enqueue(key);
+                entry=new();tiles[key]=entry;order.Enqueue(key);
                 // Keep in-flight computations alive; callers retain their own tile references.
                 int attempts=order.Count;
-                while(tiles.Count>CacheLimit && attempts-->0)
-                {var old=order.Dequeue();if(tiles.TryGetValue(old,out var v)&&v.IsValueCreated)tiles.Remove(old);else order.Enqueue(old);}
+                while(tiles.Count>plan.CachedTiles && attempts-->0)
+                {var old=order.Dequeue();if(tiles.TryGetValue(old,out var v)&&Volatile.Read(ref v.Completed)!=0)tiles.Remove(old);else order.Enqueue(old);}
             }
         }
-        return lazy.Value;
+        if(Interlocked.CompareExchange(ref entry.Started,1,0)==0)
+        {
+            try
+            {
+                var src=sources[layer];var bounds=Rectangle.Intersect(src.Bounds,new Rectangle(key.Item2*TileSize,key.Item3*TileSize,TileSize,TileSize));
+                LadderField.Prepared prepared;
+                // While another tile uses GDI, help with already prepared rows.
+                while(!renderGate.Wait(0)){work.Assist(()=>renderGate.CurrentCount>0);work.Check();}
+                try{work.Check();prepared=LadderField.Prepare(design,src.Layer,renderer,src.Grid,bounds,activity.Preparing);}
+                finally{renderGate.Release();work.Wake();}
+                entry.Field=LadderField.Fit(design,prepared,work.Token,1,n=>activity.Fitted(src.Layer.Name,n),work.ForRows);
+            }
+            catch(Exception ex){work.Fail(ex);throw;}
+            finally{Volatile.Write(ref entry.Completed,1);work.Wake();}
+        }
+        else work.Until(()=>Volatile.Read(ref entry.Completed)!=0);
+        work.Check();return entry.Field!;
     }
     internal bool At(double x,double y,out LadderField? field,out int k)
     {
@@ -185,12 +226,16 @@ internal sealed class LadderEncoder:IDisposable
     }
     internal static void Write(Design design,Stream output,uint start,uint count,IProgress<EncodingProgress>? progress,CancellationToken token)
     {
-        using var sampler=new LadderEncoder(design,progress,token);var g=design.Geometry;
+        WriteWithPlan(design,output,start,count,progress,token,LadderParallelPlan.Current());
+    }
+    internal static void WriteWithPlan(Design design,Stream output,uint start,uint count,IProgress<EncodingProgress>? progress,CancellationToken token,LadderParallelPlan plan)
+    {
+        using var sampler=new LadderEncoder(design,progress,token,plan);var g=design.Geometry;
         var mapping=new ImageMappingOptions(checked((uint)g.Sectors),g.InnerRadiusMm,g.OuterRadiusMm,133.3,0,true,128,1,PitchLinear:g.PitchLinear,PitchQuadratic:g.PitchQuadratic,PitchCubic:g.PitchCubic);
-        var options=new MultiBlockSolveOptions(start,count,0x30000,1,4,1,64,.25,false,mapping,Algorithm:SolverAlgorithm.Dispersion,FastParallelism:Math.Clamp(Environment.ProcessorCount/2,1,8));
+        var options=new MultiBlockSolveOptions(start,count,0x30000,1,4,1,64,.25,false,mapping,Algorithm:SolverAlgorithm.Dispersion,FastParallelism:plan.Workers);
         FastDispersionImageWriter.WriteScrambledCodewordPatternStream(sampler.Sample,output,options,sampler.activity.Written,token,sampler.FinishBlock);
     }
-    public void Dispose(){renderer.Dispose();workers.Dispose();tiles.Clear();}
+    public void Dispose(){renderer.Dispose();workers.Dispose();renderGate.Dispose();work.Dispose();tiles.Clear();}
 }
 
 // Reports work inside a DVD batch as well as committed output. Progress always

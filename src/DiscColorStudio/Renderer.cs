@@ -7,6 +7,8 @@ public sealed class Renderer : IDisposable
 {
     internal AngleColorEngine AngleColors { get; } = new();
     internal CancellationToken Cancellation { get; set; }
+    internal Action<int,Action<int>>? ColorSchedule { get; set; }
+    internal int ColorParallelism { get; set; }=Math.Min(8,Environment.ProcessorCount);
     internal bool UseGpu { get; }
     internal bool InteractivePreview { get; set; }
     internal int AdaptiveMapperBuildCount { get; private set; }
@@ -79,7 +81,7 @@ public sealed class Renderer : IDisposable
         long bytes=(long)image.Width*image.Height*4;
         while(adjustedImages.Count>0 && adjustedBytes+bytes>adjustedCacheLimit)
         {var entry=adjustedImages.First();adjustedBytes-=(long)entry.Value.Width*entry.Value.Height*4;entry.Value.Dispose();adjustedImages.Remove(entry.Key);}
-        var result=UseGpu ? GpuPreview.RenderColors(image,mixer,Cancellation) : mixer.Render(image,Cancellation);
+        var result=UseGpu ? GpuPreview.RenderColors(image,mixer,Cancellation) : mixer.Render(image,Cancellation,ColorParallelism,ColorSchedule);
         if(Cancellation.IsCancellationRequested){result.Dispose();Cancellation.ThrowIfCancellationRequested();}
         adjustedImages[key]=result;adjustedBytes+=bytes;ColorEditRenderCount++;return result;
     }
