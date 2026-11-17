@@ -9,28 +9,31 @@ internal sealed class LadderField
     internal required LadderPose Pose;internal required LadderPixel[] Bands;internal required float[] U;
     internal required byte[] Alpha;
     internal double Azimuth;
-    internal static LadderField Build(Design design,Layer layer,Renderer renderer,int grid,Rectangle? crop=null)
+    internal static LadderField Build(Design design,Layer layer,Renderer renderer,int grid,Rectangle? crop=null,Action<int>? fitted=null,Action<string>? preparing=null)
     {
         var bounds=Rectangle.Intersect(LayerPreview.Bounds(layer,grid),crop??new Rectangle(0,0,grid,grid));
         var pose=LadderPose.ForLayer(layer);int count=Math.Max(0,bounds.Width)*Math.Max(0,bounds.Height);
         var result=new LadderField{Azimuth=Math.Atan2(layer.Y,layer.X),Layer=layer,Bounds=bounds,Grid=grid,Pose=pose,Bands=new LadderPixel[count],U=new float[count],Alpha=new byte[count]};
         if(count==0)return result;
         var input=design.Clone();var background=input.Palette.Single(s=>s.Id==input.BackgroundId);background.CameraRgb=[0,0,0];
-        using var coverage=renderer.Composite(input,new(grid,bounds),[layer],true);
+        preparing?.Invoke(layer.Name);
+        using var coverage=renderer.Composite(input,new(grid,bounds),[layer],true,coverageOnly:true);
         result.Alpha=Renderer.ReadAlpha(coverage);
+        if (!result.Alpha.Any(a=>a!=0)) return result;
         int index=design.Layers.FindIndex(l=>l.Id==layer.Id);
         using var source=renderer.Composite(input,new(grid,bounds),input.Layers.Take(index+1).ToArray());
         var rgb=AngleColorEngine.Pixels(source);var model=LadderMath.Shared.Value;double step=120d/grid;
         Parallel.For(0,bounds.Height,new ParallelOptions{CancellationToken=renderer.Cancellation,MaxDegreeOfParallelism=Math.Min(8,Environment.ProcessorCount)},row=>
         {
-            Span<double> nearby=stackalloc double[6];double y=(bounds.Y+row+.5)*step-60;
+            Span<double> nearby=stackalloc double[6];double y=(bounds.Y+row+.5)*step-60;int completed=0;
             for(int col=0;col<bounds.Width;col++)
             {
                 int k=row*bounds.Width+col;double x=(bounds.X+col+.5)*step-60,r2=x*x+y*y;
                 if(result.Alpha[k]==0||r2<design.Geometry.InnerRadiusMm*design.Geometry.InnerRadiusMm||r2>design.Geometry.OuterRadiusMm*design.Geometry.OuterRadiusMm){result.Alpha[k]=0;continue;}
                 double u=pose.At(x,y);pose.Nearby(x,y,nearby);result.U[k]=(float)u;
-                result.Bands[k]=model.Fit(rgb[k],u,nearby,layer.BandingReduction);
+                result.Bands[k]=model.Fit(rgb[k],u,nearby,layer.BandingReduction);completed++;
             }
+            if(completed>0)fitted?.Invoke(completed);
         });
         return result;
     }
@@ -91,6 +94,7 @@ internal sealed class LadderEncoder:IDisposable
     private sealed record Source(Layer Layer,int Grid,Rectangle Bounds);
     private sealed class Worker(int count){internal LadderField?[] Last=new LadderField?[count];}
     private readonly Design design;
+    private readonly LadderExportProgress activity;
     private readonly Source[] sources;
     private readonly LadderMath model=LadderMath.Shared.Value;
     private readonly Renderer renderer=new();
@@ -102,10 +106,10 @@ internal sealed class LadderEncoder:IDisposable
     private const int CacheLimit=1536; // <= 408 MiB of completed field arrays, independent of export grid.
     internal LadderEncoder(Design document,IProgress<EncodingProgress>? progress,CancellationToken token)
     {
-        design=document.Clone();renderer.Cancellation=token;
+        activity=new(progress);design=document.Clone();renderer.Cancellation=token;renderer.ConfigureExportColorCache();
         sources=design.Layers.Where(l=>l.Visible&&l.Opacity>0).Select(l=>new Source(l,design.ImageRasterSize(l),LayerPreview.Bounds(l,design.ImageRasterSize(l)))).ToArray();
         workers=new(()=>new Worker(sources.Length),true);
-        progress?.Report(new(Ui.Text("按每张图片的采样精度计算周期梯配方…"),.02));
+        activity.Start();
     }
     // Diagnostic reference is intentionally separate from the bounded production cache.
     internal IReadOnlyList<LadderField> Fields=>sources.Select(s=>LadderField.Build(design,s.Layer,renderer,s.Grid)).ToArray();
@@ -118,7 +122,7 @@ internal sealed class LadderEncoder:IDisposable
             if(!tiles.TryGetValue(key,out lazy!))
             {
                 var src=sources[layer];var bounds=Rectangle.Intersect(src.Bounds,new Rectangle(key.Item2*TileSize,key.Item3*TileSize,TileSize,TileSize));
-                lazy=new(()=>{lock(renderGate)return LadderField.Build(design,src.Layer,renderer,src.Grid,bounds);});tiles[key]=lazy;order.Enqueue(key);
+                lazy=new(()=>{lock(renderGate)return LadderField.Build(design,src.Layer,renderer,src.Grid,bounds,n=>activity.Fitted(src.Layer.Name,n),activity.Preparing);});tiles[key]=lazy;order.Enqueue(key);
                 // Keep in-flight computations alive; callers retain their own tile references.
                 int attempts=order.Count;
                 while(tiles.Count>CacheLimit && attempts-->0)
@@ -184,8 +188,53 @@ internal sealed class LadderEncoder:IDisposable
         using var sampler=new LadderEncoder(design,progress,token);var g=design.Geometry;
         var mapping=new ImageMappingOptions(checked((uint)g.Sectors),g.InnerRadiusMm,g.OuterRadiusMm,133.3,0,true,128,1,PitchLinear:g.PitchLinear,PitchQuadratic:g.PitchQuadratic,PitchCubic:g.PitchCubic);
         var options=new MultiBlockSolveOptions(start,count,0x30000,1,4,1,64,.25,false,mapping,Algorithm:SolverAlgorithm.Dispersion,FastParallelism:Math.Clamp(Environment.ProcessorCount/2,1,8));
-        long last=0;
-        FastDispersionImageWriter.WriteScrambledCodewordPatternStream(sampler.Sample,output,options,p=>{long now=Environment.TickCount64;if(now-last<250&&p.CompletedBlocks!=p.TotalBlocks)return;last=now;progress?.Report(new(Ui.Format("生成 DVD 镜像 {0:P1}",p.Fraction),.2+.77*p.Fraction));},token,sampler.FinishBlock);
+        FastDispersionImageWriter.WriteScrambledCodewordPatternStream(sampler.Sample,output,options,sampler.activity.Written,token,sampler.FinishBlock);
     }
     public void Dispose(){renderer.Dispose();workers.Dispose();tiles.Clear();}
+}
+
+// Reports work inside a DVD batch as well as committed output. Progress always
+// denotes written sectors; recipe counters remain explicit work counters.
+internal sealed class LadderExportProgress(IProgress<EncodingProgress>? progress)
+{
+    private readonly object gate=new();
+    private readonly System.Diagnostics.Stopwatch clock=System.Diagnostics.Stopwatch.StartNew();
+    private long fitted,lastReport;
+    private double fraction=.02;
+    internal void Start()=>progress?.Report(new(Ui.Text("按每张图片的采样精度计算周期梯配方…"),fraction));
+    internal void Preparing(string name)
+    {
+        if(progress is null)return;
+        lock(gate)
+        {
+            long now=clock.ElapsedMilliseconds;
+            if(lastReport!=0 && now-lastReport<1000)return;
+            lastReport=now;
+            progress.Report(new(Ui.Format("准备图片颜色：{0} · {1:0} 秒",name,clock.Elapsed.TotalSeconds),fraction));
+        }
+    }
+    internal void Fitted(string name,int count)
+    {
+        if(progress is null)return;
+        long total=Interlocked.Add(ref fitted,count);
+        lock(gate)
+        {
+            long now=clock.ElapsedMilliseconds;
+            if(total!=count && now-lastReport<250)return;
+            lastReport=now;
+            progress.Report(new(Ui.Format("计算周期梯配方：{0} · 已计算 {1:N0} 个采样点 · {2:0} 秒",name,Interlocked.Read(ref fitted),clock.Elapsed.TotalSeconds),fraction));
+        }
+    }
+    internal void Written(FastDvdStreamProgress value)
+    {
+        if(progress is null)return;
+        lock(gate)
+        {
+            fraction=.02+.95*value.Fraction;
+            long now=clock.ElapsedMilliseconds;
+            if(now-lastReport<250 && value.CompletedBlocks!=value.TotalBlocks)return;
+            lastReport=now;
+            progress.Report(new(Ui.Format("生成 DVD 镜像 {0:P1}",value.Fraction),fraction));
+        }
+    }
 }

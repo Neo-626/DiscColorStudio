@@ -61,6 +61,15 @@ public sealed class Renderer : IDisposable
         previewSources[key]=small;previewSourceBytes+=bytes;return small;
     }
     private long adjustedBytes;
+    private long adjustedCacheLimit=128L*1024*1024;
+    internal void ConfigureExportColorCache()
+    {
+        // Spiral traversal revisits every image on successive turns. Retain a
+        // larger working set for a frozen export; interactive previews stay small.
+        adjustedCacheLimit=Math.Clamp(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes/8,
+            128L*1024*1024,1024L*1024*1024);
+    }
+    internal long AdjustedColorCacheLimit=>adjustedCacheLimit;
     internal int ColorEditRenderCount { get; private set; }
     private Bitmap Adjusted(string asset, Bitmap image, ColorMixer? mixer)
     {
@@ -68,7 +77,7 @@ public sealed class Renderer : IDisposable
         string key=asset+":"+image.Width+":"+image.Height+":"+System.Text.Json.JsonSerializer.Serialize(mixer,Design.Json);
         if(adjustedImages.TryGetValue(key,out var existing))return existing;
         long bytes=(long)image.Width*image.Height*4;
-        while(adjustedImages.Count>0 && adjustedBytes+bytes>128L*1024*1024)
+        while(adjustedImages.Count>0 && adjustedBytes+bytes>adjustedCacheLimit)
         {var entry=adjustedImages.First();adjustedBytes-=(long)entry.Value.Width*entry.Value.Height*4;entry.Value.Dispose();adjustedImages.Remove(entry.Key);}
         var result=UseGpu ? GpuPreview.RenderColors(image,mixer,Cancellation) : mixer.Render(image,Cancellation);
         if(Cancellation.IsCancellationRequested){result.Dispose();Cancellation.ThrowIfCancellationRequested();}
@@ -89,12 +98,12 @@ public sealed class Renderer : IDisposable
     private readonly Dictionary<string, (byte[] Alpha, bool Opaque)> alphaCache = [];
     public Bitmap Composite(Design d, int size, bool reviewPreview = false) => Composite(d, RasterRegion.Full(size), reviewPreview: reviewPreview);
 
-    internal Bitmap Composite(Design d, RasterRegion region, IReadOnlyList<Layer>? layers = null, bool transparent = false, bool reviewPreview = false)
+    internal Bitmap Composite(Design d, RasterRegion region, IReadOnlyList<Layer>? layers = null, bool transparent = false, bool reviewPreview = false, bool coverageOnly = false)
     {
         var bitmap = new Bitmap(region.Bounds.Width, region.Bounds.Height, PixelFormat.Format32bppArgb);
         try
         {
-            DrawComposite(bitmap, d, region, layers, transparent, reviewPreview);
+            DrawComposite(bitmap, d, region, layers, transparent, reviewPreview, coverageOnly);
             return bitmap;
         }
         catch
@@ -104,7 +113,7 @@ public sealed class Renderer : IDisposable
         }
     }
 
-    private void DrawComposite(Bitmap bitmap, Design d, RasterRegion region, IReadOnlyList<Layer>? layers, bool transparent, bool reviewPreview)
+    private void DrawComposite(Bitmap bitmap, Design d, RasterRegion region, IReadOnlyList<Layer>? layers, bool transparent, bool reviewPreview, bool coverageOnly)
     {
         using var g = Graphics.FromImage(bitmap);
         g.Clear(transparent ? Color.Transparent : d.Palette.Single(s => s.Id == d.BackgroundId).Color(d.MatchGain));
@@ -115,6 +124,8 @@ public sealed class Renderer : IDisposable
         foreach (var layer in (layers ?? d.Layers).Where(l => l.Visible))
         {
             Cancellation.ThrowIfCancellationRequested();
+            // Skip off-tile layers before decoding or whole-source HSL processing.
+            if (layer.Opacity <= 0 || !LayerPreview.Bounds(layer, region.Size).IntersectsWith(region.Bounds)) continue;
             var saved = g.Save();
             if (RasterGrid.IsTiled(region.Size))
                 g.TranslateTransform((float)((layer.X + 60) / region.Step - region.Bounds.X),
@@ -134,7 +145,7 @@ public sealed class Renderer : IDisposable
                     images[asset] = image = new Bitmap(loaded);
                 }
                 image=PreviewSource(asset,image,rect.Width,rect.Height);
-                image=Adjusted(asset,image,layer.BypassColorMixer?null:layer.ColorMixer);
+                if (!coverageOnly) image=Adjusted(asset,image,layer.BypassColorMixer?null:layer.ColorMixer);
                 float contrast = (float)(layer.Contrast * layer.InputExposure);
                 float offset = (1 - (float)layer.Contrast) * .5f + (float)layer.Brightness / 255f;
                 using var attributes = new ImageAttributes();

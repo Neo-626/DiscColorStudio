@@ -1,4 +1,4 @@
-# Band ladder · v0.8.5
+# Band ladder · v0.8.7
 
 **English** | [简体中文](BandLadder.zh-CN.md)
 
@@ -37,6 +37,8 @@ The top **Simulation preview** row examines the encoded recipe while you adjust 
 - **Reset view** returns the simulation to the per-image reference.
 
 Under **Texture and Detail**, **View balance** balances the central viewing point against nearby viewpoints. Lower values prioritize the central point. **Sampling precision** controls the image grid used for encoding.
+
+**For much faster ISO generation in Band ladder mode, start with 8,192 cells under Texture and Detail → Sampling precision.** Higher settings provide finer sampling and take longer to compute.
 
 ## Save and burn
 

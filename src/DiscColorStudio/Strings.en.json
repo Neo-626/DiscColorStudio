@@ -355,5 +355,7 @@
   "两个设置可随时调整；箭头从图片指向观察者。": "Adjust either setting at any time. The arrow points from the image toward the viewer.",
   "恢复默认观看设置": "Restore default viewing setup",
   "观看这张图片时，整张光盘绕盘心顺时针旋转的角度。": "Clockwise rotation of the whole disc about its hub when viewing this image.",
-  "图片转到所设摆位后，指向观察者的方向：右 0°、下 90°、左 180°、上 270°。": "Direction from the image toward the viewer in the viewing pose: right 0°, down 90°, left 180°, up 270°."
+  "图片转到所设摆位后，指向观察者的方向：右 0°、下 90°、左 180°、上 270°。": "Direction from the image toward the viewer in the viewing pose: right 0°, down 90°, left 180°, up 270°.",
+  "计算周期梯配方：{0} · 已计算 {1:N0} 个采样点 · {2:0} 秒": "Computing ladder recipes: {0} · {1:N0} samples computed · {2:0} s",
+  "准备图片颜色：{0} · {1:0} 秒": "Preparing image colours: {0} · {1:0} s"
 }

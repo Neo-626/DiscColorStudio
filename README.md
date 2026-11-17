@@ -6,15 +6,18 @@ A Windows tool for burning color images onto the **data side of ordinary DVD-R d
 
 **Supported media: new, blank single-layer DVD-R (4.7 GB) only.**
 
-## New in v0.8.5: Band ladder
+## Color modes
 
-**Band ladder trades color fidelity and brightness for a wider viewing-angle range.**
+- **Measured colour**: uses a table of colors photographed from different textures at different angles, then selects and mixes textures for the target color and disc position. Choose it for color fidelity at the best viewing angle; its viewing range is narrow.
+- **Band ladder**: inspired by [DiscDiffractStudio](https://github.com/Neo-626/DiscDiffractStudio), which uses textures with different periods to show different images in different directions. Here the image stays still. Contributions from different periods are combined to approximately preserve its colors over a range of viewing angles, trading some color fidelity and brightness for a wider viewing range.
 
-The measured-color method remains available in the toolbar. New projects use **Band ladder**, which interleaves a range of recording periods and calculates their color mixtures from the image content, disc position, and viewing setup.
+Choose a mode in the toolbar. New projects use **Band ladder**. Each image has independent **Disc orientation for viewing** and **Direction toward viewer** settings; enter values or draw an arrow from the image toward the viewer, and change either setting at any time.
 
-Each image has independent **Disc orientation for viewing** and **Direction toward viewer** settings. Enter values or draw an arrow from the image toward the viewer; either setting can be changed at any time. Simulated color and DVD encoding use the same recipe.
+**For Band ladder, choose “8,192 cells” under Texture and Detail → Sampling precision for much faster ISO generation. This is the recommended starting point.** Higher settings provide finer sampling and take longer to compute.
 
-[Band-ladder guide with screenshots](docs/BandLadder.md) · [Download v0.8.5](https://github.com/Neo-626/DiscColorStudio/releases/tag/v0.8.5)
+v0.8.7 improves the source-image color cache and ladder recipe calculations, and shows the current image, sample count, and elapsed time during generation. The English and Simplified Chinese interfaces are updated together.
+
+[Band-ladder guide with screenshots](docs/BandLadder.md) · [Download v0.8.7](https://github.com/Neo-626/DiscColorStudio/releases/tag/v0.8.7)
 
 ## Disc demos
 
@@ -211,6 +214,7 @@ A **texture** is a fine, repeating data pattern written to the DVD. The program 
 
 | Setting | Software sampling interval | Suggested use |
 | --- | --- | --- |
+| 8,192 | About 14.65 μm per cell | Recommended starting point for Band ladder, with faster ISO generation. |
 | 32,768 | About 3.66 μm per cell | A starting point for general image work. |
 | 65,536 | About 1.83 μm per cell | Further comparison for fine hair, small text, and detailed outlines. |
 | 131,072 / 262,144 | About 0.92 / 0.46 μm per cell | High-density sampling experiments; additional visible detail has not been measured, and ISO generation takes longer. |

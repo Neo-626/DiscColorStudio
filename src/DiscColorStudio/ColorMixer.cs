@@ -74,13 +74,29 @@ public sealed class ColorMixer
         var result=original.Clone(new Rectangle(0,0,original.Width,original.Height),PixelFormat.Format32bppArgb);
         if(IsIdentity)return result;
         var bits=result.LockBits(new Rectangle(0,0,result.Width,result.Height),ImageLockMode.ReadWrite,PixelFormat.Format32bppArgb);
-        // Exact 24-bit keys, direct-mapped cache. No 5-bit quantization in source editing.
-        var keys=new int[65536];Array.Fill(keys,-1);var values=new int[65536];
-        try { for(int y=0;y<result.Height;y++) {cancellation.ThrowIfCancellationRequested();int* row=(int*)((byte*)bits.Scan0+y*bits.Stride);
-            for(int x=0;x<result.Width;x++) {int rgb=row[x]&0xffffff,k=(int)((unchecked((uint)rgb*2654435761u))>>16);
-                if(keys[k]!=rgb){keys[k]=rgb;values[k]=ApplyCore(Color.FromArgb(unchecked((int)0xff000000)|rgb)).ToArgb()&0xffffff;}
-                row[x]=(row[x]&unchecked((int)0xff000000))|values[k];}}
-        } catch {result.UnlockBits(bits);result.Dispose();throw;} result.UnlockBits(bits);return result;
+        // Exact RGB memoization per worker; rows are independent and alpha is preserved.
+        try
+        {
+            int width=result.Width,height=result.Height,stride=bits.Stride;IntPtr scan=bits.Scan0;
+            Parallel.For(0,(height+31)/32,new ParallelOptions{CancellationToken=cancellation,MaxDegreeOfParallelism=Math.Min(8,Environment.ProcessorCount)},
+                ()=>{var keys=new int[65536];Array.Fill(keys,-1);return (Keys:keys,Values:new int[65536]);},
+                (chunk,_,cache)=>
+                {
+                    for(int y=chunk*32;y<Math.Min(height,(chunk+1)*32);y++)
+                    {
+                        cancellation.ThrowIfCancellationRequested();int* row=(int*)((byte*)scan+y*stride);
+                        for(int x=0;x<width;x++)
+                        {
+                            int rgb=row[x]&0xffffff,k=(int)(unchecked((uint)rgb*2654435761u)>>16);
+                            if(cache.Keys[k]!=rgb){cache.Keys[k]=rgb;cache.Values[k]=ApplyCore(Color.FromArgb(unchecked((int)0xff000000)|rgb)).ToArgb()&0xffffff;}
+                            row[x]=(row[x]&unchecked((int)0xff000000))|cache.Values[k];
+                        }
+                    }
+                    return cache;
+                },_=>{});
+        }
+        catch {result.UnlockBits(bits);result.Dispose();throw;}
+        result.UnlockBits(bits);return result;
     }
 }
 

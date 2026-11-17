@@ -36,6 +36,7 @@ internal sealed class LadderMath
     internal readonly int[] Cycle,Rank;
     private readonly LVec[] off;
     private readonly double halfLog;
+    private static readonly double[] LinearBytes=Enumerable.Range(0,256).Select(i=>Linear(i/255d)).ToArray();
     private static readonly LVec D65=new(.9505,1,1.089);
     internal static LVec V(double[] a)=>new(a[0],a[1],a[2]);
     internal LadderMath()
@@ -53,23 +54,41 @@ internal sealed class LadderMath
     {double lam=Math.Log(Math.Max(designU,1e-9)*Data.Carriers[k].Period*Data.ChannelBitNm);double red=Math.Clamp((lam+halfLog-Math.Log(580))/(2*halfLog),0,1),blue=Math.Clamp((Math.Log(490)-lam+halfLog)/(2*halfLog),0,1);return new(red,1-red-blue,blue);}
     internal void Affine(double u,double view,Span<LVec> a,out LVec b)
     {
-        b=Lookup(off,view);a.Clear();
+        Span<LVec> weights=stackalloc LVec[30];
+        for(int k=0;k<weights.Length;k++)weights[k]=Weights(k,u);
+        Affine(weights,view,a,out b);
+    }
+    private void Affine(ReadOnlySpan<LVec> weights,double view,Span<LVec> a,out LVec b)
+    {
+        double f=Math.Clamp(Math.Abs(view)/Data.UStep,0,off.Length-1);
+        int lower=(int)f,upper=Math.Min(lower+1,off.Length-1);double fraction=f-lower;
+        b=off[lower]+(off[upper]-off[lower])*fraction;a.Clear();
         for(int k=0;k<Data.Carriers.Length;k++)
         {
-            var c=Data.Carriers[k];LVec w=Weights(k,u),difference=(Lookup(c.Values,view)-b)*(c.Count/(double)Cycle.Length*c.Gain);
-            a[0]+=difference*w.X;a[1]+=difference*w.Y;a[2]+=difference*w.Z;
+            var c=Data.Carriers[k];
+            // All bundled spectra share one angle grid; preserve interpolation order.
+            var response=c.Values.Length==off.Length
+                ? c.Values[lower]+(c.Values[upper]-c.Values[lower])*fraction : Lookup(c.Values,view);
+            LVec w=weights[k],difference=(response-b)*(c.Count/(double)Cycle.Length*c.Gain);
+            if(w.X!=0)a[0]+=difference*w.X;
+            if(w.Y!=0)a[1]+=difference*w.Y;
+            if(w.Z!=0)a[2]+=difference*w.Z;
         }
         b/=Data.Exposure;for(int k=0;k<3;k++)a[k]/=Data.Exposure;
     }
     internal static double Linear(double v)=>v<=.04045?v/12.92:Math.Pow((v+.055)/1.055,2.4);
-    internal static LVec LinearRgb(int argb)=>new(Linear(((argb>>16)&255)/255d),Linear(((argb>>8)&255)/255d),Linear((argb&255)/255d));
+    internal static LVec LinearRgb(int argb)=>new(LinearBytes[(argb>>16)&255],LinearBytes[(argb>>8)&255],LinearBytes[argb&255]);
     internal static LVec Xyz(LVec c)=>new(.412395588967414*c.X+.357583430763715*c.Y+.180492647381701*c.Z,.212586230785596*c.X+.715170303703411*c.Y+.0722004986433362*c.Z,.0192972154917469*c.X+.119183864580849*c.Y+.95049712513158*c.Z);
     private static double Derivative(double x)=>x>Math.Pow(6d/29,3)?1/(3*Math.Pow(Math.Max(x,1e-12),2d/3)):1/(3*Math.Pow(6d/29,2));
     private static LVec Perceptual(LVec v,LVec derivative)=>new(116*.65*v.Y*derivative.Y,500*(v.X*derivative.X-v.Y*derivative.Y),200*(v.Y*derivative.Y-v.Z*derivative.Z));
     internal LadderPixel Fit(int argb,double u,ReadOnlySpan<double> views,double stability=1)
     {
         var rgb=LinearRgb(argb);if(rgb.Max<=.003)return default;
-        Span<LVec> a=stackalloc LVec[3];Affine(u,u,a,out var b);
+        // Carrier weights depend only on design u. Share them across all seven
+        // fit views without quantizing position or changing the summation order.
+        Span<LVec> weights=stackalloc LVec[30];
+        for(int k=0;k<weights.Length;k++)weights[k]=Weights(k,u);
+        Span<LVec> a=stackalloc LVec[3];Affine(weights,u,a,out var b);
         var xyz=Xyz(rgb);LVec target=new(xyz.X/D65.X*White.X*.9,xyz.Y*.9,xyz.Z/D65.Z*White.Z*.9);
         double tone=b.Y+Math.Max(.9-b.Y,0)*Math.Pow(xyz.Y,.85),lift=Math.Min(8,tone/Math.Max(target.Y,1e-12));var goal=target*lift;
         LVec derivative=new(Derivative(Math.Max(0,goal.X/White.X))/White.X,Derivative(Math.Max(0,goal.Y/White.Y))/White.Y,Derivative(Math.Max(0,goal.Z/White.Z))/White.Z);
@@ -77,7 +96,7 @@ internal sealed class LadderMath
         double det=a[0].Dot(a[1].Cross(a[2]));var d=goal-b;
         if(Math.Abs(det)>1e-14){s[0]=Math.Clamp(d.Dot(a[1].Cross(a[2]))/det,0,1);s[1]=Math.Clamp(a[0].Dot(d.Cross(a[2]))/det,0,1);s[2]=Math.Clamp(a[0].Dot(a[1].Cross(d))/det,0,1);}else s.Fill(.5);
         Accumulate(a,d,derivative,1,h,rhs);
-        foreach(double view in views){Affine(u,view,a,out var bv);Accumulate(a,goal-bv,derivative,.25*stability/views.Length,h,rhs);}
+        foreach(double view in views){Affine(weights,view,a,out var bv);Accumulate(a,goal-bv,derivative,.25*stability/views.Length,h,rhs);}
         for(int iteration=0;iteration<60;iteration++)
         {double change=0;for(int k=0;k<3;k++){double residual=rhs[k];for(int j=0;j<3;j++)residual-=h[k*3+j]*s[j];double next=Math.Clamp(s[k]+residual/Math.Max(h[k*3+k],1e-15),0,1);change=Math.Max(change,Math.Abs(next-s[k]));s[k]=next;}if(change<2e-8)break;}
         double toe=Math.Clamp((rgb.Max-.003)/(.035-.003),0,1);toe=toe*toe*(3-2*toe);
