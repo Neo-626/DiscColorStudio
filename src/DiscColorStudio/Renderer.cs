@@ -1,4 +1,4 @@
-using System.Drawing.Drawing2D;
+﻿using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 
 namespace DiscColorStudio;
@@ -14,6 +14,40 @@ public sealed class Renderer : IDisposable
     internal int AdaptiveMapperBuildCount { get; private set; }
     public Renderer() : this(false) { }
     internal Renderer(bool useGpu) { UseGpu=useGpu; }
+    private readonly ExportImagePool? exportImages;
+    internal Renderer(ExportImagePool images):this(false){exportImages=images;}
+    // Reject only tiles separated from the image quad after expanding by both
+    // destination and source interpolation margins. Unknown source formats use GDI.
+    internal bool EmptyImageTile(Design design,Layer layer,RasterRegion region)
+    {
+        if(exportImages is null||layer.Kind!="image"||layer.AssetId is null)return false;
+        byte[] data=design.Assets[layer.AssetId];
+        if(data.Length<24||!data.AsSpan(0,8).SequenceEqual(new byte[]{137,80,78,71,13,10,26,10}))return false;
+        int width=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(16,4)),height=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(20,4));
+        if(width<=0||height<=0)return false;
+        float unit=region.Size/120f;using var m=new Matrix();
+        if(RasterGrid.IsTiled(region.Size))m.Translate((float)((layer.X+60)/region.Step-region.Bounds.X),(float)((layer.Y+60)/region.Step-region.Bounds.Y));
+        else m.Translate(region.Size/2f+(float)layer.X*unit-region.Bounds.X,region.Size/2f+(float)layer.Y*unit-region.Bounds.Y);
+        m.Rotate((float)layer.Rotation);m.Invert();
+        PointF[] corners=[new(-8,-8),new(region.Bounds.Width+8,-8),new(-8,region.Bounds.Height+8),new(region.Bounds.Width+8,region.Bounds.Height+8)];m.TransformPoints(corners);
+        float x=(float)layer.Width*unit/2,y=(float)layer.Height*unit/2;
+        x+=8*x/width;y+=8*y/height;
+        return corners.All(p=>p.X < -x)||corners.All(p=>p.X>x)||corners.All(p=>p.Y < -y)||corners.All(p=>p.Y>y);
+    }
+    internal bool FullyOpaque(Layer layer,RasterRegion region)
+    {
+        if(exportImages is null||layer.Kind!="image"||layer.AssetId is null||layer.Opacity!=1)return false;
+        float unit=region.Size/120f;using var m=new Matrix();
+        if(RasterGrid.IsTiled(region.Size))m.Translate((float)((layer.X+60)/region.Step-region.Bounds.X),(float)((layer.Y+60)/region.Step-region.Bounds.Y));
+        else m.Translate(region.Size/2f+(float)layer.X*unit-region.Bounds.X,region.Size/2f+(float)layer.Y*unit-region.Bounds.Y);
+        m.Rotate((float)layer.Rotation);m.Invert();
+        PointF[] corners=[new(-8,-8),new(region.Bounds.Width+8,-8),new(-8,region.Bounds.Height+8),new(region.Bounds.Width+8,region.Bounds.Height+8)];m.TransformPoints(corners);
+        float halfWidth=(float)layer.Width*unit/2,halfHeight=(float)layer.Height*unit/2;
+        if(corners.Any(p=>p.X<=-halfWidth||p.X>=halfWidth||p.Y<=-halfHeight||p.Y>=halfHeight))return false;
+        using var raw=exportImages.Acquire(layer,true);
+        float padX=4*2*halfWidth/raw.Image.Width,padY=4*2*halfHeight/raw.Image.Height;
+        return raw.Opaque&&corners.All(p=>p.X>-halfWidth+padX&&p.X<halfWidth-padX&&p.Y>-halfHeight+padY&&p.Y<halfHeight-padY);
+    }
     private readonly Dictionary<string, Bitmap> comparisonPreviews = [];
     private readonly Dictionary<string,LadderField> ladderFields=[];
     private long ladderBytes;
@@ -72,7 +106,8 @@ public sealed class Renderer : IDisposable
             128L*1024*1024,1024L*1024*1024);
     }
     internal long AdjustedColorCacheLimit=>adjustedCacheLimit;
-    internal int ColorEditRenderCount { get; private set; }
+    private int colorEditRenderCount;
+    internal int ColorEditRenderCount =>exportImages?.ColorRenders??colorEditRenderCount;
     private Bitmap Adjusted(string asset, Bitmap image, ColorMixer? mixer)
     {
         if(mixer is null || mixer.IsIdentity)return image;
@@ -83,7 +118,7 @@ public sealed class Renderer : IDisposable
         {var entry=adjustedImages.First();adjustedBytes-=(long)entry.Value.Width*entry.Value.Height*4;entry.Value.Dispose();adjustedImages.Remove(entry.Key);}
         var result=UseGpu ? GpuPreview.RenderColors(image,mixer,Cancellation) : mixer.Render(image,Cancellation,ColorParallelism,ColorSchedule);
         if(Cancellation.IsCancellationRequested){result.Dispose();Cancellation.ThrowIfCancellationRequested();}
-        adjustedImages[key]=result;adjustedBytes+=bytes;ColorEditRenderCount++;return result;
+        adjustedImages[key]=result;adjustedBytes+=bytes;colorEditRenderCount++;return result;
     }
     private string lutKey = "";
     private readonly byte[] lut = new byte[32768];
@@ -141,17 +176,23 @@ public sealed class Renderer : IDisposable
             if (layer.Kind == "image" && layer.AssetId is not null)
             {
                 string asset = layer.AssetId;
-                if (!images.TryGetValue(asset, out var image))
+                using var rented=exportImages?.Acquire(layer,coverageOnly);
+                Bitmap image;
+                if(rented is not null)image=rented.Image;
+                else
                 {
-                    using var memory = new MemoryStream(d.Assets[asset]); using var loaded = Image.FromStream(memory);
-                    images[asset] = image = new Bitmap(loaded);
+                    if (!images.TryGetValue(asset,out image!))
+                    {
+                        using var memory=new MemoryStream(d.Assets[asset]);using var loaded=Image.FromStream(memory);
+                        images[asset]=image=new Bitmap(loaded);
+                    }
+                    image=PreviewSource(asset,image,rect.Width,rect.Height);
+                    if(!coverageOnly)image=Adjusted(asset,image,layer.BypassColorMixer?null:layer.ColorMixer);
                 }
-                image=PreviewSource(asset,image,rect.Width,rect.Height);
-                if (!coverageOnly) image=Adjusted(asset,image,layer.BypassColorMixer?null:layer.ColorMixer);
                 float contrast = (float)(layer.Contrast * layer.InputExposure);
                 float offset = (1 - (float)layer.Contrast) * .5f + (float)layer.Brightness / 255f;
                 using var attributes = new ImageAttributes();
-                attributes.SetColorMatrix(new ColorMatrix(new float[][] {
+                if(rented?.ToneApplied!=true)attributes.SetColorMatrix(new ColorMatrix(new float[][] {
                     [contrast,0,0,0,0],[0,contrast,0,0,0],[0,0,contrast,0,0],[0,0,0,(float)layer.Opacity,0],[offset,offset,offset,0,1] }));
                 attributes.SetWrapMode(WrapMode.TileFlipXY);
                 // GDI+ cannot reliably rasterize a rotated destination tens of thousands

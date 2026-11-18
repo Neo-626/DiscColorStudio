@@ -15,9 +15,9 @@ Choose a mode in the toolbar. New projects use **Band ladder**. Each image has i
 
 **For Band ladder, choose “8,192 cells” under Texture and Detail → Sampling precision for much faster ISO generation. This is the recommended starting point.** Higher settings provide finer sampling and take longer to compute.
 
-v0.8.7 improves the source-image color cache and ladder recipe calculations, and shows the current image, sample count, and elapsed time during generation. The English and Simplified Chinese interfaces are updated together.
+v0.8.9 speeds up ISO generation for rotated images while preserving color recipes and sampling precision. A full-ISO benchmark at 32,768 cells improved from 10 min 11 s to 3 min 03 s, with identical output. English and Simplified Chinese are included.
 
-[Band-ladder guide with screenshots](docs/BandLadder.md) · [Download v0.8.7](https://github.com/Neo-626/DiscColorStudio/releases/tag/v0.8.7)
+[Band-ladder guide with screenshots](docs/BandLadder.md) · [Download latest release](https://github.com/Neo-626/DiscColorStudio/releases/latest)
 
 ## Disc demos
 

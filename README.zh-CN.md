@@ -15,9 +15,9 @@
 
 **周期梯模式下，在「纹理与细节 → 采样精度」选择「8,192 格」，生成 ISO 会快很多，建议从这一档开始。** 更高档位适合需要更细采样的图片，计算时间也会增加。
 
-v0.8.7 优化了原图调色缓存和周期梯配方计算，并在生成时显示正在处理的图片、采样点数和耗时。中英文界面同步更新。
+v0.8.9 加快了旋转图片的 ISO 生成，保持颜色配方和采样精度不变。32,768 格的完整 ISO 测试从 10 分 11 秒降至 3 分 03 秒，输出完全一致。同一程序包含英文和简体中文。
 
-[周期梯图文说明](docs/BandLadder.zh-CN.md) · [下载 v0.8.7](https://github.com/Neo-626/DiscColorStudio/releases/tag/v0.8.7)
+[周期梯图文说明](docs/BandLadder.zh-CN.md) · [下载最新版](https://github.com/Neo-626/DiscColorStudio/releases/latest)
 
 ## 实盘演示
 

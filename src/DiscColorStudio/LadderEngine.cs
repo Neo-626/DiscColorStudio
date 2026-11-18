@@ -1,3 +1,4 @@
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 using DvdImageSolver.Solver;
 using DvdImageSolver.Encoding;
@@ -15,21 +16,22 @@ internal sealed class LadderField
         return Fit(design,prepared,renderer.Cancellation,Math.Min(8,Environment.ProcessorCount),fitted);
     }
     // GDI objects and renderer caches are accessed only during Prepare. Fit owns
-    // plain arrays, so independent export tiles can run without the renderer lock.
+    // plain arrays. Export gives concurrent Prepare calls independent GDI handles.
     internal sealed record Prepared(LadderField Field,int[] Rgb);
     internal static Prepared Prepare(Design design,Layer layer,Renderer renderer,int grid,Rectangle? crop=null,Action<string>? preparing=null)
     {
         var bounds=Rectangle.Intersect(LayerPreview.Bounds(layer,grid),crop??new Rectangle(0,0,grid,grid));
         var pose=LadderPose.ForLayer(layer);int count=Math.Max(0,bounds.Width)*Math.Max(0,bounds.Height);
         var result=new LadderField{Azimuth=Math.Atan2(layer.Y,layer.X),Layer=layer,Bounds=bounds,Grid=grid,Pose=pose,Bands=new LadderPixel[count],U=new float[count],Alpha=new byte[count]};
-        if(count==0)return new(result,[]);
+        if(count==0||renderer.EmptyImageTile(design,layer,new(grid,bounds)))return new(result,[]);
         var input=design.Clone();var background=input.Palette.Single(s=>s.Id==input.BackgroundId);background.CameraRgb=[0,0,0];
         preparing?.Invoke(layer.Name);
-        using var coverage=renderer.Composite(input,new(grid,bounds),[layer],true,coverageOnly:true);
-        result.Alpha=Renderer.ReadAlpha(coverage);
+        bool opaque=renderer.FullyOpaque(layer,new(grid,bounds));
+        if(opaque)Array.Fill(result.Alpha,(byte)255);
+        else{using var coverage=renderer.Composite(input,new(grid,bounds),[layer],true,coverageOnly:true);result.Alpha=Renderer.ReadAlpha(coverage);}
         if (!result.Alpha.Any(a=>a!=0)) return new(result,[]);
         int index=design.Layers.FindIndex(l=>l.Id==layer.Id);
-        using var source=renderer.Composite(input,new(grid,bounds),input.Layers.Take(index+1).ToArray());
+        using var source=renderer.Composite(input,new(grid,bounds),opaque?[layer]:input.Layers.Take(index+1).ToArray());
         return new(result,AngleColorEngine.Pixels(source));
     }
     internal static LadderField Fit(Design design,Prepared prepared,CancellationToken token,int parallelism,Action<int>? fitted=null,Action<int,Action<int>>? schedule=null)
@@ -119,9 +121,12 @@ internal sealed class LadderEncoder:IDisposable
     private readonly LadderExportProgress activity;
     private readonly Source[] sources;
     private readonly LadderMath model=LadderMath.Shared.Value;
-    private readonly Renderer renderer=new();
+    private readonly Renderer renderer;
+    private readonly Renderer[] renderers;
+    private readonly ConcurrentQueue<Renderer> availableRenderers=new();
+    private readonly ExportImagePool? exportImages;
     private readonly object cacheGate=new();
-    private readonly SemaphoreSlim renderGate=new(1,1);
+    private readonly SemaphoreSlim renderGate;
     private readonly LadderParallelPlan plan;
     private readonly LadderWorkQueue work;
     private sealed class TileEntry{internal int Started,Completed;internal LadderField? Field;}
@@ -132,7 +137,18 @@ internal sealed class LadderEncoder:IDisposable
     internal LadderEncoder(Design document,IProgress<EncodingProgress>? progress,CancellationToken token,LadderParallelPlan? parallelPlan=null)
     {
         activity=new(progress);design=document.Clone();plan=parallelPlan??LadderParallelPlan.Current();
-        work=new(token,plan.Workers);renderer.Cancellation=work.Token;renderer.ColorParallelism=1;renderer.ColorSchedule=work.ForColors;renderer.ConfigureExportColorCache();
+        work=new(token,plan.Workers);
+        bool rotated=design.Layers.Any(l=>l.Visible&&l.Kind=="image"&&l.Rotation%360!=0);
+        int rendering=rotated?ExportImagePool.RenderingWorkers(design,plan.Workers):1;
+        if(rotated)exportImages=new(design,work);
+        renderGate=new(rendering,rendering);renderers=new Renderer[rendering];
+        for(int i=0;i<renderers.Length;i++)
+        {
+            var r=exportImages is null?new Renderer():new Renderer(exportImages);
+            r.Cancellation=work.Token;r.ColorParallelism=1;r.ColorSchedule=work.ForColors;r.ConfigureExportColorCache();
+            renderers[i]=r;availableRenderers.Enqueue(r);
+        }
+        renderer=renderers[0];
         sources=design.Layers.Where(l=>l.Visible&&l.Opacity>0).Select(l=>new Source(l,design.ImageRasterSize(l),LayerPreview.Bounds(l,design.ImageRasterSize(l)))).ToArray();
         workers=new(()=>new Worker(sources.Length),true);
         activity.Start();
@@ -162,8 +178,9 @@ internal sealed class LadderEncoder:IDisposable
                 LadderField.Prepared prepared;
                 // While another tile uses GDI, help with already prepared rows.
                 while(!renderGate.Wait(0)){work.Assist(()=>renderGate.CurrentCount>0);work.Check();}
-                try{work.Check();prepared=LadderField.Prepare(design,src.Layer,renderer,src.Grid,bounds,activity.Preparing);}
-                finally{renderGate.Release();work.Wake();}
+                if(!availableRenderers.TryDequeue(out var raster)){renderGate.Release();throw new InvalidOperationException("Missing export renderer");}
+                try{work.Check();prepared=LadderField.Prepare(design,src.Layer,raster,src.Grid,bounds,activity.Preparing);}
+                finally{availableRenderers.Enqueue(raster);renderGate.Release();work.Wake();}
                 entry.Field=LadderField.Fit(design,prepared,work.Token,1,n=>activity.Fitted(src.Layer.Name,n),work.ForRows);
             }
             catch(Exception ex){work.Fail(ex);throw;}
@@ -235,7 +252,7 @@ internal sealed class LadderEncoder:IDisposable
         var options=new MultiBlockSolveOptions(start,count,0x30000,1,4,1,64,.25,false,mapping,Algorithm:SolverAlgorithm.Dispersion,FastParallelism:plan.Workers);
         FastDispersionImageWriter.WriteScrambledCodewordPatternStream(sampler.Sample,output,options,sampler.activity.Written,token,sampler.FinishBlock);
     }
-    public void Dispose(){renderer.Dispose();workers.Dispose();renderGate.Dispose();work.Dispose();tiles.Clear();}
+    public void Dispose(){foreach(var r in renderers)r.Dispose();exportImages?.Dispose();workers.Dispose();renderGate.Dispose();work.Dispose();tiles.Clear();}
 }
 
 // Reports work inside a DVD batch as well as committed output. Progress always
